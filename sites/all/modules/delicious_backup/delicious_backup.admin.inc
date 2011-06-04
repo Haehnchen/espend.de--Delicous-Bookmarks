@@ -34,7 +34,7 @@ function delicious_backup_data() {
       '#type' => 'textarea',
       '#disabled' => 'true',
       '#description' => t('You should see some when last post was added. Else check userdata!'),
-      '#value' => delicious_backup_get_response('posts/update'),
+      '#value' => DeliciousBackup::GetResponse('posts/update'),
     );
   }
 
@@ -66,7 +66,7 @@ function delicious_backup_data_submit($form, &$form_state) {
 function delicious_backup_sync_submit($form, &$form_state) {
   if(isset($form_state['values']['update']) AND $form_state['values']['update'] == 1) {
     drupal_set_message('Nodes and Bookmarks are updated / imported. Check logs for further information.');
-    delicious_backup_import_raw();
+    delicious_backup_import_bookmarks();
   } else {
     drupal_set_message('Nothing to do, please activate checkbox to import bookmarks.', 'warning');
   }

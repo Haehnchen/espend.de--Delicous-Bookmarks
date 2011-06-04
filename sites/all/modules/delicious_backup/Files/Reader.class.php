@@ -12,6 +12,21 @@ class Reader {
 
   }
 
+  private function CreateDOM($html) {
+    
+    $oldSetting = libxml_use_internal_errors(true);
+    libxml_clear_errors();    
+    
+    
+    $doc = new DOMDocument();
+    #$doc->encoding = 'UTF-8'; // insert proper
+    $doc->loadHTML('<?xml encoding="UTF-8">' . $html);
+    
+    libxml_clear_errors();
+    libxml_use_internal_errors( $oldSetting );    
+    
+    return $doc;
+  }  
 
   function GetHtml() {
     $this->html = file_get_contents($this->url);
@@ -31,9 +46,7 @@ class Reader {
         )
      *
      */
-
-    $doc = new DOMDocument();
-    $doc->loadHTML($content);
+    $doc = $this->CreateDOM($content);
 
     $xpath = new DOMXPath($doc);
 
@@ -53,7 +66,7 @@ class Reader {
 
       // check if image is a thumbnail; mostly it is clickable (lightbox)
       $parent = $element->parentNode;
-      if ($parent->nodeName == 'a' AND preg_match('@\.(png|jpg|gif|jpeg)$@i', $parent->getAttribute( 'href')) AND url_to_absolute($baseurl, $parent->getAttribute( 'href' )) != $img_t['absolute_url']) {
+      if ($parent->nodeName == 'a' AND $this->_is_img_url($parent->getAttribute( 'href')) AND url_to_absolute($baseurl, $parent->getAttribute( 'href' )) != $img_t['absolute_url']) {
         $img_t['thumbnail'] = $img_t['absolute_url'];
         $img_t['absolute_url'] = url_to_absolute($baseurl, $parent->getAttribute( 'href' ));
         $img_t['parent'] = '1';
@@ -71,9 +84,9 @@ class Reader {
   }
 
   function GetImagesReplacedMarker($content = '') {
-    $doc = new DOMDocument();
-    $doc->loadHTML($content);
-
+  
+    $doc = $this->CreateDOM($content);
+ 
     $xpath = new DOMXPath($doc);
 
     $imgs = array();
@@ -105,8 +118,7 @@ class Reader {
   }
   
   function ReplaceExternalImages($content, $imgs) {
-    $doc = new DOMDocument();
-    $doc->loadHTML($content);
+    $doc = $this->CreateDOM($content);
 
     $xpath = new DOMXPath($doc);
 
@@ -120,6 +132,11 @@ class Reader {
         if ($this->_is_img_url($element->parentNode->getAttribute('href'))) {
           $ele = $element->parentNode;
           $img_src = $element->parentNode->getAttribute('href');
+        } else {
+          
+          // image link to external !?
+          $img_src = $element->getAttribute('src');
+          $ele = $element;
         }
         
       } else {
@@ -151,21 +168,9 @@ class Reader {
         
         
       if (!$ele) {
-
         //image not found or unknown format; remove it
         $element->parentNode->removeChild($element);
       }
-
-
-      /*
-      // check if image is a thumbnail; mostly it is clickable (lightbox)
-      if ($element->parentNode->nodeName == 'a' AND preg_match('@\.(png|jpg|gif|jpeg)$@i', $element->parentNode->getAttribute('href')) AND url_to_absolute($baseurl, $element->parentNode->getAttribute( 'href' )) != $element->getAttribute( 'src' )) {
-        // lightbox elements
-        $element->parentNode->parentNode->replaceChild($doc->createTextNode($image_marker), $element->parentNode);
-      } else {
-        $element->parentNode->replaceChild($doc->createTextNode($image_marker), $element);
-      }
-*/
 
 
     }
@@ -176,11 +181,7 @@ class Reader {
   
   function GetPaseUrl($fallbackurl = '') {
 
-  $oldSetting = libxml_use_internal_errors( true );
-  libxml_clear_errors();
-
-    $doc = new DOMDocument();
-    $doc->loadHTML($this->html);
+    $doc = $this->CreateDOM($this->html);    
 
     $xpath = new DOMXPath($doc);
 

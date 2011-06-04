@@ -1,5 +1,11 @@
 <?php
 
+require_once drupal_get_path('module', 'delicious_backup') . '/Files/JSLikeHTMLElement.php';
+require_once drupal_get_path('module', 'delicious_backup') . '/Files/DeliciousBackup.class.php';
+require_once drupal_get_path('module', 'delicious_backup') . '/Files/Readability.php';
+require_once drupal_get_path('module', 'delicious_backup') . '/Files/url_to_absolute.merge.php';
+
+
 function delicious_backup_autoload_info() {
   return array(
     'DeliciousImport' => array('file' => 'sites/all/modules/delicious_backup/DeliciousImport.class.php'),
@@ -57,690 +63,6 @@ function delicious_backup_menu() {
   return $items;
 }
 
-
-/**
- * Implements hook_cron_queue_info().
- */
-function delicious_backup_cron_queue_info() {
-  $queues = array();
-  
-  $queues['delicious_backup_get_content'] = array(
-    'worker callback' => 'delicious_backup_get_content',
-    'time' => 15,
-  );
-  
-  $queues['delicious_backup_update_node'] = array(
-    'worker callback' => 'delicious_backup_update_node',
-    'time' => 15,
-  );  
-  
-  return $queues;
-}
-
-function delicious_backup_full_worker() {
-  /* queue workers */
-  $queue = DrupalQueue::get('delicious_backup_get_content');
-  while ($item = $queue->claimItem(15)) {
-    delicious_backup_get_content($item->data);
-    $queue->deleteItem($item);
-  }  
-  
-  /* queue workers */
-  $queue = DrupalQueue::get('delicious_backup_update_node');
-  while ($item = $queue->claimItem(15)) {
-    delicious_backup_update_node($item->data);
-    $queue->deleteItem($item);
-  }     
-}
-
-function delicious_backup_cron() {
-  
- // delicious_backup_get_content(1229);
-  #delicious_backup_update_node(1228, true);
-  #exit;
-  
-  #delicious_backup_import_raw();
-  #delicious_backup_get_content(1216);
-  //delicious_backup_update_node(1216, true);
-  //exit;
-#delicious_backup_update_node(1199, true);
-#exit;
-  #$obj = db_query("SELECT nid,bid,hash,href FROM {delicious_bookmarks_backup} WHERE nid = :nid", array(':nid' => '3606'))->fetchObject();
-  #delicious_backup_update_node($obj);
-
-//$test = new DeliciousImport();
-//$node = node_load(3464);
-//$node->created = time();
-//node_save($node); exit;
-//print_r($node); exit;
-  // no cron needed
-
- 
-  
-  #$query = db_select('delicious_bookmarks_backup')->condition('bid', 122222222222)->countQuery()->execute()->fetchField();
-  #echo $query; exit;
-  //delicious_backup_import_raw();
-  /* fetch all bookmarks */
-  $cron_time = time() - variable_get('delicious_backup_last_cron', 0);
-  if ($cron_time > (variable_get('delicious_backup_cron_time', 60*60*12))) delicious_backup_import_raw();
-  variable_set('delicious_backup_last_cron', time());
-
-  #$query = db_select('delicious_bookmarks_backup')
-  #  ->condition('response_code', 200, '!=')
-  #  ->fields('delicious_bookmarks_backup', array('bid'));
-    #->range(0, 50);  
-
-  
-  /* fetch html content worker */
-  
-  //http://api.drupal.org/api/drupal/modules--aggregator--aggregator.module/function/aggregator_cron/7
-  //http://api.drupal.org/api/drupal/modules--aggregator--aggregator.module/function/aggregator_refresh/7
-  
-  $result = db_query_range("SELECT bid FROM {delicious_bookmarks_backup} WHERE response_code != :response_code AND response_errors < 4 AND queued = 0", 0, 20100, array(
-    ':response_code' => 200,
-  ));
-
-  $queue = DrupalQueue::get('delicious_backup_get_content') ;
-  $queue->createQueue();
-  foreach ($result as $record) {
-    $queue->createItem($record->bid);
-    db_update('delicious_bookmarks_backup')->fields(array('queued' => REQUEST_TIME))->condition('bid', $record->bid)->execute();
-  }
-
-  /*
-  $query = db_select('delicious_bookmarks_backup')
-    ->condition('content_updated', $cron_time, '>')
-    ->fields('delicious_bookmarks_backup', array('bid'));
-    #->range(0, 50);
-
-  $queue = DrupalQueue::get('delicious_backup_update_node') ;
-  $queue->createQueue();
-  $result = $query->execute();
-  foreach($result as $record) {
-    $queue->createItem($record->bid);
-  }
-
-*/
-  
-  /*
-  $result = db_query_range("SELECT nid FROM {delicious_bookmarks_backup} WHERE response_code = :response_code", 0, 100, array(
-    ':response_code' => 200,
-  ));
-
-  foreach ($result as $record) {
-    delicious_backup_update_node($record->nid);
-  }
-  */
-  #return ;
-}
-
-function delicious_backup_update_node_images(&$node, $html, $url) {
-
-    
-  $r = new Reader($url, $html);
-    
-  if (!count($imgs = $r->GetImagesInfo($html)) > 0) return false;
-  
-  foreach($imgs as $img) {
-    delicious_backup_get_file($node, $img);
-  }
-  
-  return true;
-
-  //reload node
-  //$node = node_load($obj->nid);
-
-  /*$html = $r->GetImagesReplacedMarker($html);
-
-  $field_images = field_get_items('node', $node, 'delicious_bookmark_image', $node->language);
-
-  for($i=0;$i < count($imgs); $i++) {
-    foreach($field_images as $fimg) {
-      // image exists
-      if (basename($imgs[$i]['absolute_url']) == $fimg['filename']) {
-        #echo basename($imgs[$i]['absolute_url']) . ' . ' . $fimg['filename'] . "\r\n";
-        // force alt and title tag
-        if (isset($imgs[$i]['alt']) AND !isset($imgs[$i]['title'])) $imgs[$i]['title'] = $imgs[$i]['alt'];
-        if (isset($imgs[$i]['title']) AND !isset($imgs[$i]['alt'])) $imgs[$i]['alt'] = $imgs[$i]['title'];
-
-        $html = preg_replace('@\[IMAGE-'.$i.'\]@', '<img width="200" src="'.  file_create_url($fimg['uri']) .'" alt="'.(isset($imgs[$i]['alt']) ? $imgs[$i]['alt'] : '').'" title="'.(isset($imgs[$i]['title']) ? $imgs[$i]['title'] : '').'">', $html);
-        #echo '<img width="200" src="'.  file_create_url($fimg['uri']) .'" alt="'.$fimg['alt'] ? $fimg['uri'] : ''.'" title="'.$fimg['title'] ? $fimg['title'] : ''.'">'; exit;
-      }
-    }  
-  }*/
-  
-}
-
-function delicious_backup_replace_img_src($node, $content) {
-  
-    //if (!$images = field_get_items('node', $node, 'delicious_bookmark_image', $node->language)) return $content;
-  
-    
-    $doc = new DOMDocument();
-    $doc->loadHTML($content);
-
-    $xpath = new DOMXPath($doc);
-    
-    $field_images = field_get_items('node', $node, 'delicious_bookmark_image', $node->language);
-    
-    $imgs = array();
-    foreach($field_images as $img) {
-      $imgs[$img['filename']] = array(
-        'width' => '200',
-        'src' => file_create_url($img['uri']),
-       );
-      
-      if ($img['alt']) $imgs[$img['filename']]['alt'] = $imgs['alt'];
-      if ($img['title']) $imgs[$img['filename']]['title'] = $imgs['title'];
-      
-    };
-      
-    
-    /*
-    print_r($imgs);
-
-    foreach($xpath->query( "//img") as $element) {
-      if (isset($imgs[basename($element->getAttribute('src'))])) {
-        $element->setAttribute('src', 'test.jpg');
-      }
-      
-      print_r($element);
-    }
-    
-    echo $doc->saveHTML();
-    */
-    
-    $test = new Reader();
-    return $test->ReplaceExternalImages($content, $imgs);
-    
-
-}
-
-function delicious_backup_update_node($obj, $getimages = false) {
-
-  $getimages = true;
-  
-  if (is_numeric($obj)) $obj = db_query("SELECT nid,bid,hash,href FROM {delicious_bookmarks_backup} WHERE bid = :bid", array(':bid' => $obj))->fetchObject();
-  
-  $file = 'public://delicious_backup/' . $obj->hash;
-
-  if (!file_exists($file)) {
-    watchdog('delicious_backup', 'No content for %id - %url ', array('%id' => $obj->bid, '%url' => $obj->href));
-    return false;    
-  }
-
-  if (!$html = file_get_contents($file)) {
-    watchdog('delicious_backup', 'Error getting hash file %id - %url ', array('%id' => $obj->bid, '%url' => $obj->href));
-    return false;
-  }
-  
-  if (strlen($html) == 0) {
-    watchdog('delicious_backup', 'Zero content for %id - %url ', array('%id' => $obj->bid, '%url' => $obj->href));
-    return false;    
-  }
-
-  $content = delicious_backup_getcontent_id($html);
-  $content = mb_convert_encoding($content, 'HTML-ENTITIES', "UTF-8");
-
-  $node = node_load($obj->nid);
-
-  if ($getimages == true) {
-    $path = drupal_get_path('module', 'delicious_backup');    
-    //require_once $path.'/Files/Reader.class.php';    
-    delicious_backup_update_node_images($node, $content, $obj->href);
-    
-    $content = delicious_backup_replace_img_src($node, $content);
- 
-   
-    
-  }
-
-  $content = delicious_backup_filter($content);
-
-
-
-  #print_r($node);
-
-  //$node->body[$node->language][0]['value'] = '<pre>' . $content . '</pre>';
-  #$node->body[$node->language][0]['value'] = delicious_backup_filter_html_node_content($content);
-
-  $node = node_load($obj->nid);
-  $node->body[$node->language][0]['value'] = $content;
-  $node->body[$node->language][0]['format'] = 'full_html';
-
-
-  node_save($node);
-  
-  return true;
-}
-
-function delicious_backup_get_file(&$node, $img_ar) {
-
-  try {
-    //throw new Exception('foo!');
-    //$node = node_load($nid);
-
-    // check if images already attached to this node
-    if ($images = field_get_items('node', $node, 'delicious_bookmark_image', $node->language)) {
-      
-      foreach($images as $img) {
-        if (basename($img_ar['absolute_url']) == $img['filename']) return true;
-      }
-      
-    }
-    
-    
-    $img_path = 'public://link_image/'. $node->nid .'/' . basename($img_ar['absolute_url']);
-    file_prepare_directory($dest_path = dirname($img_path), FILE_CREATE_DIRECTORY | FILE_MODIFY_PERMISSIONS);
-    
-    if (!file_exists($img_path)) {
-      $res = drupal_http_request($img_ar['absolute_url']);
-      if ($res->code != 200) throw new Exception('error getting image: ' . $img_ar['absolute_url']);
-      file_put_contents($img_path, $res->data);    
-    }
-    
-    // @TODO: more check here
-    if (filesize($img_path) == 0) throw new Exception('invalid image file: ' . $img_ar['absolute_url']);
-    
-    // create a file object to attach
-    $file =  new stdClass();
-    #$files->uid = (isset($local_user->uid) && !empty($local_user->uid)?$local_user->uid:1);
-    $file->filename = basename($img_ar['absolute_url']);
-    $file->uri = $img_path;
-    $file->filemime = file_get_mimetype($img_path);
-    $file->status = 1;
-    
-    // attributes
-    if (isset($img_ar['alt'])) $file->alt = $img_ar['alt'];
-    if (isset($img_ar['title'])) $file->title = $img_ar['title'];    
-    
-    file_save($file);
-    
-    $node->delicious_bookmark_image[$node->language][]['fid'] = $file->fid;    
-
-    // @TODO: reload node to get new field; some better funtion?
-    node_save($node);
-    
-    $node = node_load($node->nid);
-
-  } catch (Exception $e) {
-    watchdog_exception('delicious_backup', $e);
-    return false;
-  }
-  
-  return true;
-}
-
-function delicious_backup_get_response($type) {
-  $headers = _delicious_backup_headers();
-
-  $url = "https://". variable_get('delicious_backup_username') .":". variable_get('delicious_backup_password') ."@api.del.icio.us/v1/";
-  $res = drupal_http_request($url . $type, array('headers' => $headers));
-  return $res->data; 
-
-}
-
-function _delicious_backup_headers() {
-  $headers = array();
-  return array(
-    'User-Agent' => 'drupal.contributions.delicious_backup.module/1.0',
-  );
-}
-
-function delicious_backup_import_raw() {
-
-  //if (!$str = @file_get_contents('public://cache'))
-  //  file_put_contents('public://cache', delicious_backup_get_response('posts/all?'));
-  $str = delicious_backup_get_response('posts/all?');
-
-  $vid = taxonomy_vocabulary_machine_name_load('delicious_backup_tags')->vid;
-
-  $xml = new SimpleXMLElement($str);
-
-  $new = 0;
-  foreach ($xml->post as $post) {
-    if (!isset($post['shared']) AND (string) $post['shared'] != 'no') {
-
-
-    db_merge('delicious_bookmarks_backup')
-      ->key(array('hash' => (string) $post['hash']))
-      ->fields(array(
-          'href' => (string) $post['href'],
-          'meta' => (string) $post['meta'],
-          'description' => (string) $post['description'],
-          'time' => strtotime((string) $post['time']),
-          'extended' => (string) $post['extended'],
-          'tag' => (string) $post['tag'],
-          'last_found' => time(),
-      ))
-      ->execute();
-
-    $obj = db_query("SELECT nid,bid FROM {delicious_bookmarks_backup} WHERE hash = :hash", array(':hash' => (string) $post['hash']))->fetchAssoc();
-
-    $categories = delicious_backup_taxonomie_helper(explode(' ', $post['tag']),  $vid);
-
-    if ($obj['nid'] == 0) {
-
-      $node = new stdClass();
-      $node->type = 'delicious_bookmark';
-      $node->language = LANGUAGE_NONE;
-
-      node_object_prepare($node);
-      $node->title = (string) $post['description'];
-      $node->delicious_backup_tags[LANGUAGE_NONE] = $categories;
-      $node->created = strtotime((string) $post['time']);
-
-      node_save($node);
-
-      db_update('delicious_bookmarks_backup')
-        ->fields(array('nid' => $node->nid, 'last_found' => time()))
-        ->condition('hash', (string) $post['hash'])
-        ->execute();
-
-      $new++;
-
-    } else {
-
-      $node = node_load($obj['nid']);
-
-      $node->delicious_backup_tags[LANGUAGE_NONE] = $categories;
-      $node->created = strtotime((string) $post['time']);
-
-      node_save($node);
-
-    }
-   }
-  }
-
-  if ($new > 0) watchdog('delicious_backup', 'New %count Bookmark(s) Imported', array('%count' => $new));
-
-}
-
-function delicious_backup_taxonomie_helper($term_str_ar, $vid) {
-
-  // first paramter can be string or array
-  if (is_string($term_str_ar)) $term_str_ar = array($term_str_ar);
-
-  $b = array();
-  foreach($term_str_ar as $term_str) {
-
-    // look for term and filter it by vocabulary; sry not in drupal core
-    if ($terms = taxonomy_get_term_by_name($term_str)) {
-      foreach($terms as $term) {
-        if ($term->vid == $vid) $b[] = array('tid' => $term->tid);
-     }
-
-    } else {
-
-      // create a new term
-      $edit = array(
-        'name' => $term_str,
-        'description' => '',
-        'parent' => array(0),
-        'vid' =>  $vid,
-      );
-
-      $term = (object) $edit;
-      taxonomy_term_save($term);
-      $b[] = array('tid' => $term->tid);
-
-    }
-  }
-
-  return $b;
-}
-
-/* hook_delicious_backup_updated */
-function delicious_backup_delicious_backup_updated($bid) {
-
-  $queue = DrupalQueue::get('delicious_backup_update_node') ;
-  $queue->createQueue();
-  //$result = $query->execute();
-  //foreach($result as $record) {
-  //echo $bid; exit;
-  $queue->createItem($bid);
-  //}
-  
-}
-
-function delicious_backup_get_content($l) {
-
-  if (is_numeric($l)) $l = db_query("SELECT bid, hash, href FROM {delicious_bookmarks_backup} WHERE bid = :bid", array(':bid' => $l))->fetchObject();
-  
-  $opts = array(
-    'timeout' => 10,
-  );
-
-  $result = drupal_http_request($l->href, $opts);
-
-  if ($result->code == 200) {
-    //db_update('delicious_bookmarks_backup')->fields(array('content_fetched' => time(), 'html_content' => gzencode ($result->data)))->condition('bid',$bid)->execute();
-    db_update('delicious_bookmarks_backup')->fields(array('response_code' => $result->code, 'content_fetched' => time(), 'content_updated' => time(), 'queued' => 0))->condition('bid', $l->bid)->execute();
-    if (!file_exists('public://delicious_backup')) drupal_mkdir('public://delicious_backup');
-
-    file_put_contents('public://delicious_backup/' . $l->hash, $result->data);
-    
-    module_invoke_all('delicious_backup_updated', $l->bid);
-
-    watchdog('delicious_backup', 'OK getting html content %id - %url ', array('%id' => $l->bid, '%url' => $l->href));
-
-  } else {
-    watchdog('delicious_backup', 'Error getting html content %id - %url ', array('%id' => $l->bid, '%url' => $l->href), WATCHDOG_ALERT);
-    
-    db_update('delicious_bookmarks_backup')
-    ->fields(array(
-      'content_fetched' => time(),
-      'response_code' => $result->code,
-      'queued' => 0,
-    ))
-    ->expression('response_errors', 'response_errors + 1')
-    ->condition('bid', $l->bid)->execute();
-    
-  }
-
-}
-
-function delicious_backup_getcontent_id($html) {
-
-  $path = drupal_get_path('module', 'delicious_backup');
-  //require_once $path.'/Files/JSLikeHTMLElement.php';
-  //require_once $path.'/Files/Readability.php';
-  require_once $path.'/Files/url_to_absolute.merge.php';
-
-
-  // give it to Readability
-  $readability = new Readability($html);
-  // print debug output?
-  // useful to compare against Arc90's original JS version -
-  // simply click the bookmarklet with FireBug's console window open
-  $readability->debug = false;
-  // convert links to footnotes?
-  #$readability->convertLinksToFootnotes = true;
-  // process it
-  $result = $readability->init();
-  // does it look like we found what we wanted?
-  if ($result) {
-    #echo "== Title =====================================\n";
-    #echo $readability->getTitle()->textContent, "\n\n";
-    #echo "== Body ======================================\n";
-    $content = $readability->getContent()->innerHTML;
-    // if we've got Tidy, let's clean it up for output
-  } else {
-   $content = false;
-  }
-
-  return $content;
-
-}
-
-function delicious_backup_filter($str, $refilter = false) {
-
-    if (!file_exists('public://HTMLPurifierCache')) drupal_mkdir('public://HTMLPurifierCache');
-
-    require_once drupal_get_path('module', 'delicious_backup') . '/library/HTMLPurifier.auto.php';
-
-    #$config = HTMLPurifier_Config::createDefault();
-    #$purifier = new HTMLPurifier();
-    #$config =HTMLPurifier_Config::createDefault()->getHTMLDefinition(true)->addElement('article', "header", "footer", "aside", array());
-
-    $config = HTMLPurifier_Config::createDefault();
-
-    #$config->getHTMLDefinition(true)->addElement('article', "header", "footer", "aside", array());
-    #$config->set('HTML.Allowed', 'div[id]');
-    #$config->set('AutoFormat.AutoParagraph', true);
-    $config->set('AutoFormat.RemoveEmpty', true);
-    #$config->set('AutoFormat.RemoveEmpty.RemoveNbsp', true);
-
-    if ($refilter == false) {
-      $config->set('Attr.EnableID', true);
-      #$config->set('HTML.EnableAttrID', true);
-      #$config->set('Attr.IDPrefix', 'dsb_');
-      $config->set('HTML.Allowed', 'div[id],ul[id],li[class],ul[class],p,pre,h2,h3,h4,5,br,code,blockquote,article,img[src],img[width],img[alt],img[title],strong,a[href]');
-    } else {
-      $config->set('HTML.Allowed', 'div,ul,li,p,pre,h2,h3,h4,h5,br,code,blockquote,b,u,i,ol,strong,a[href],img[src],img[width],img[alt],img[title]');
-    }
-
-
-
-
-    $config->set('Cache.SerializerPath', 'public://HTMLPurifierCache');
-
-    $purifier = new HTMLPurifier($config);
-
-    $str = $purifier->purify($str);
-    $str = preg_replace('/^[ \t]*[\r\n]+/m', '', $str);
-
-
-    //$str = str_replace("\t",'&nbsp;&nbsp;&nbsp;', $str);
-
-    #    $str = nl2br($clean_html);
-    return $str;
-
-}
-
-
-function delicious_backup_remove_ids($str, $unwated = array('footer','header', 'sidebar', 'credits', 'copyright', 'navigation', 'head', 'edit-comment-body', 'comments', 'nav')) {
-  #$unwated = array('footer','header','sidebar');
-
-  $doc = new DOMDocument();;
-  #$doc->encoding = 'UTF-8'; // insert proper
-  $doc->loadHTML('<?xml encoding="UTF-8">' . $str);
-
-  $xpath = new DOMXPath($doc);
-
-  //theChildNode[intersect(tokenize(@name, '\s+'),('one','all'))]
-  foreach($unwated as $removeid) {
-    foreach($xpath->query( "//div[@id='$removeid']") as $element){
-      $element->parentNode->removeChild($element); // This is a hint from the manual comments.
-    }
-  }
-
-  foreach($unwated as $removeid) {
-    foreach($xpath->query( "//div[contains(@id,'$removeid')]") as $element){
-      $element->parentNode->removeChild($element); // This is a hint from the manual comments.
-    }
-  }
-
-
-
-  return $doc->saveHTML();
-}
-
-function delicious_backup_getcontent_id_1($str, $wanted = array('content','center')) {
-  $doc = new DOMDocument();
-  $doc->loadHTML('<?xml encoding="UTF-8">' . $str);
-
-  $xpath = new DOMXPath($doc);
-
-  foreach($wanted as $id) {
-    foreach($xpath->query( "//div[@id='$id']") as $element){
-      // innerHTML Function: http://refactormycode.com/codes/708-innerhtml-of-a-domelement
-      $doc = new DOMDocument();
-      $doc->appendChild($doc->importNode($element, true));
-      return $doc->saveHTML();
-    }
-  }
-
-  return $str;
-}
-
-function delicious_backup_filter_html_node_content($str) {
-  //$hash = db_query("SELECT hash FROM {delicious_bookmarks_backup} WHERE nid = :nid", array(':nid' => $node->nid))->fetchField();
-
-  //$str = file_get_contents('public://delicious_backup/'.$hash);
-#require_once 'inc/Reader.class.php';
-
-  $str = delicious_backup_filter($str);
-
-  $oldSetting = libxml_use_internal_errors( true );
-  libxml_clear_errors();
-
-  $str = delicious_backup_remove_ids($str);
-
-  $str = delicious_backup_getcontent_id($str);
-  $str = delicious_backup_filter($str, true);
-
-  libxml_clear_errors();
-  libxml_use_internal_errors( $oldSetting );
-  //$node->content['body'][0]['#markup'] = _filter_autop($str);
-
-  return  _filter_autop($str);
-}
-
-function delicious_backup_node_delete($node) {
-  if  ($node->type == 'delicious_bookmark') {
-    
-    // delete html file
-    $hash = db_query("SELECT hash FROM {delicious_bookmarks_backup} WHERE nid = :nid", array(':nid' => $node->nid))->fetchField();
-    if (file_exists('public://delicious_backup/' . $hash)) unlink('public://delicious_backup/' . $hash);
-    
-    // reset bookmark
-    db_merge('delicious_bookmarks_backup')
-      ->key(array('nid' => $node->nid))
-      ->fields(array('nid' => 0))
-      ->execute();
-
-    
-  }
-}
-
-function delicious_backup_node_view($node, $view_mode, $langcode) {
-  if($view_mode == 'full1' AND $node->type == 'delicious_bookmar1k') {
-
-    #$node->content['bla'] = 'test';
-    #$node->content['bla'
-    #$node->body[$node->language][0]['value'] = 'asdasd';
-    #$node->body[$node->language][0]['safe_value'] = 'asdasd';
-
-
-    #$node->content['body']['#items'][0]['value'] = 'asdasd';
-    #$node->content['body']['#items'][0]['safe_value'] = 'asdasd';
-
-
-    $hash = db_query("SELECT hash FROM {delicious_bookmarks_backup} WHERE nid = :nid", array(':nid' => $node->nid))->fetchField();
-
-    $str = @file_get_contents('public://delicious_backup/'.$hash);
-
-    if ($str) {
-      #$str = delicious_backup_filter($str);
-
-      $oldSetting = libxml_use_internal_errors( true );
-      libxml_clear_errors();
-
-      $str = delicious_backup_remove_ids($str);
-
-      $str = delicious_backup_getcontent_id($str);
-      $str = delicious_backup_filter($str, true);
-
-
-      libxml_clear_errors();
-      libxml_use_internal_errors( $oldSetting );
-
-      $node->content['body'][0]['#markup'] = _filter_autop($str);
-    }
-  }
-}
-
 /**
  * Implements hook_block_info().
  */
@@ -792,5 +114,409 @@ function delicious_backup_block_view($delta = '') {
     $block['content'] = '<div class="iphone-header">'. theme('item_list', array('items' => $str)) .'</div>' ;
     return $block;
 //  }
+}
+
+
+/**
+ * Implements hook_cron_queue_info().
+ */
+function delicious_backup_cron_queue_info() {
+  $queues = array();
+  
+  $queues['delicious_backup_get_content'] = array(
+    'worker callback' => 'delicious_backup_get_content',
+    'time' => 15,
+  );
+  
+  $queues['delicious_backup_update_node'] = array(
+    'worker callback' => 'delicious_backup_update_node',
+    'time' => 15,
+  );  
+  
+  return $queues;
+}
+
+/**
+ * Implements hook_node_delete().
+ */
+function delicious_backup_node_delete($node) {
+  if  ($node->type == 'delicious_bookmark') {
+    
+    // delete html file
+    $hash = db_query("SELECT hash FROM {delicious_bookmarks_backup} WHERE nid = :nid", array(':nid' => $node->nid))->fetchField();
+    if (file_exists('public://delicious_backup/' . $hash)) unlink('public://delicious_backup/' . $hash);
+    
+    // reset bookmark
+    db_merge('delicious_bookmarks_backup')
+      ->key(array('nid' => $node->nid))
+      ->fields(array('nid' => 0))
+      ->execute();
+  }
+}
+
+/**
+ * Implements hook_delicious_backup_updated().
+ */
+function delicious_backup_delicious_backup_updated($bid) {
+
+  // create a worker for update content
+  $queue = DrupalQueue::get('delicious_backup_update_node') ;
+  $queue->createQueue();
+  $queue->createItem($bid);
+}
+
+function _delicious_backup_full_worker() {
+  /* queue workers */
+  $queue = DrupalQueue::get('delicious_backup_get_content');
+  while ($item = $queue->claimItem(15)) {
+    delicious_backup_get_content($item->data);
+    $queue->deleteItem($item);
+  }  
+  
+  /* queue workers */
+  $queue = DrupalQueue::get('delicious_backup_update_node');
+  while ($item = $queue->claimItem(15)) {
+    delicious_backup_update_node($item->data);
+    $queue->deleteItem($item);
+  }     
+}
+
+function delicious_backup_cron() {
+  
+ delicious_backup_get_content(1242);
+  delicious_backup_update_node(1242, true);
+  exit;
+ 
+
+  
+  /* fetch all bookmarks */
+  $cron_time = time() - variable_get('delicious_backup_last_cron', 0);
+  if ($cron_time > (variable_get('delicious_backup_cron_time', 60*60*12))) delicious_backup_import_bookmarks();
+  variable_set('delicious_backup_last_cron', time());
+
+  
+  /* fetch html content worker */
+  //http://api.drupal.org/api/drupal/modules--aggregator--aggregator.module/function/aggregator_cron/7
+  //http://api.drupal.org/api/drupal/modules--aggregator--aggregator.module/function/aggregator_refresh/7
+  $result = db_query_range("SELECT bid FROM {delicious_bookmarks_backup} WHERE response_code != :response_code AND response_errors < 4 AND queued = 0", 0, 20100, array(
+    ':response_code' => 200,
+  ));
+
+  $queue = DrupalQueue::get('delicious_backup_get_content') ;
+  $queue->createQueue();
+  foreach ($result as $record) {
+    $queue->createItem($record->bid);
+    db_update('delicious_bookmarks_backup')->fields(array('queued' => REQUEST_TIME))->condition('bid', $record->bid)->execute();
+  }
+
+}
+
+function delicious_backup_get_images(&$node, $html, $url) {
+    
+  $r = new Reader($url, $html);
+    
+  if (!count($imgs = $r->GetImagesInfo($html)) > 0) return false;
+  
+  foreach($imgs as $img) {
+    _delicious_backup_get_image($node, $img);
+  }
+  
+  return true;
+}
+
+function _delicious_backup_replace_img_src($node, $content) {
+
+    $imgs = array();
+    foreach(field_get_items('node', $node, 'delicious_bookmark_image', $node->language) as $img) {
+      $imgs[$img['filename']] = array(
+        'width' => '200',
+        'src' => file_create_url($img['uri']),
+       );
+      
+      if ($img['alt']) $imgs[$img['filename']]['alt'] = $img['alt'];
+      if ($img['title']) $imgs[$img['filename']]['title'] = $img['title'];
+      
+    };
+ 
+    $test = new Reader();
+    return $test->ReplaceExternalImages($content, $imgs);
+}
+
+function delicious_backup_update_node($obj, $getimages = false) {
+
+  $getimages = true;
+  
+  if (is_numeric($obj)) $obj = db_query("SELECT nid,bid,hash,href FROM {delicious_bookmarks_backup} WHERE bid = :bid", array(':bid' => $obj))->fetchObject();
+  
+  $file = 'public://delicious_backup/' . $obj->hash;
+
+  if (!file_exists($file)) {
+    watchdog('delicious_backup', 'No content for %id - %url ', array('%id' => $obj->bid, '%url' => $obj->href));
+    return false;    
+  }
+
+  if (!$html = file_get_contents($file)) {
+    watchdog('delicious_backup', 'Error getting hash file %id - %url ', array('%id' => $obj->bid, '%url' => $obj->href));
+    return false;
+  }
+  
+  if (strlen($html) == 0) {
+    watchdog('delicious_backup', 'Zero content for %id - %url ', array('%id' => $obj->bid, '%url' => $obj->href));
+    return false;    
+  }
+
+  $content = DeliciousBackup::Readability($html);
+  $content = mb_convert_encoding($content, 'HTML-ENTITIES', "UTF-8");
+
+  $node = node_load($obj->nid);
+
+  if ($getimages == true) {
+    $path = drupal_get_path('module', 'delicious_backup');    
+    //require_once $path.'/Files/Reader.class.php';    
+    delicious_backup_get_images($node, $content, $obj->href);
+    
+    $content = _delicious_backup_replace_img_src($node, $content);
+    
+  }
+
+  $content = delicious_backup_filter($content);
+
+  $node = node_load($obj->nid);
+  $node->body[$node->language][0]['value'] = $content;
+  $node->body[$node->language][0]['format'] = 'full_html';
+
+  node_save($node);
+  
+  return true;
+}
+
+function _delicious_backup_get_image(&$node, $img_ar) {
+
+  try {
+    // check if image already attached to this node
+    if ($images = field_get_items('node', $node, 'delicious_bookmark_image', $node->language)) {
+      
+      foreach($images as $img) {
+        if (basename($img_ar['absolute_url']) == $img['filename']) return true;
+      }
+      
+    }
+    
+    // download image and attach to node
+    
+    $img_path = 'public://link_image/'. $node->nid .'/' . basename($img_ar['absolute_url']);
+    file_prepare_directory($dest_path = dirname($img_path), FILE_CREATE_DIRECTORY | FILE_MODIFY_PERMISSIONS);
+    
+    if (!file_exists($img_path)) {
+      $res = drupal_http_request($img_ar['absolute_url']);
+      if ($res->code != 200) throw new Exception('error getting image: ' . $img_ar['absolute_url']);
+      file_put_contents($img_path, $res->data);    
+    }
+    
+    // @TODO: more check here
+    if (filesize($img_path) == 0) throw new Exception('invalid image file: ' . $img_ar['absolute_url']);
+    
+    // create a file object to attach
+    $file =  new stdClass();
+    #$files->uid = (isset($local_user->uid) && !empty($local_user->uid)?$local_user->uid:1);
+    $file->filename = basename($img_ar['absolute_url']);
+    $file->uri = $img_path;
+    $file->filemime = file_get_mimetype($img_path);
+    $file->status = 1;
+    
+    // attributes
+    if (isset($img_ar['alt'])) $file->alt = $img_ar['alt'];
+    if (isset($img_ar['title'])) $file->title = $img_ar['title'];    
+    
+    file_save($file);
+    
+    $node->delicious_bookmark_image[$node->language][]['fid'] = $file->fid;    
+
+    // @TODO: reload node to get new field; some better funtion?
+    node_save($node);
+    
+    $node = node_load($node->nid);
+
+  } catch (Exception $e) {
+    watchdog_exception('delicious_backup', $e);
+    return false;
+  }
+  
+  return true;
+}
+
+function delicious_backup_import_bookmarks() {
+
+  $vid = taxonomy_vocabulary_machine_name_load('delicious_backup_tags')->vid;
+
+  // load bookmarks from delicious
+  $xml = new SimpleXMLElement(DeliciousBackup::GetResponse('posts/all?'));
+
+  $new = 0;
+  foreach ($xml->post as $post) {
+    
+    // dont work on private links
+    if (!isset($post['shared']) AND (string) $post['shared'] != 'no') {
+
+      // import bookmark
+      db_merge('delicious_bookmarks_backup')
+        ->key(array('hash' => (string) $post['hash']))
+        ->fields(array(
+            'href' => (string) $post['href'],
+            'meta' => (string) $post['meta'],
+            'description' => (string) $post['description'],
+            'time' => strtotime((string) $post['time']),
+            'extended' => (string) $post['extended'],
+            'tag' => (string) $post['tag'],
+            'last_found' => time(),
+        ))
+        ->execute();
+
+      // get bookmarks
+      $obj = db_query("SELECT nid,bid FROM {delicious_bookmarks_backup} WHERE hash = :hash", array(':hash' => (string) $post['hash']))->fetchAssoc();
+
+      // import tags to terms
+      $categories = _delicious_backup_taxonomie_helper(explode(' ', $post['tag']),  $vid);
+
+      if ($obj['nid'] == 0) {
+
+        $node = new stdClass();
+        $node->type = 'delicious_bookmark';
+        $node->language = LANGUAGE_NONE;
+
+        node_object_prepare($node);
+        $node->title = (string) $post['description'];
+        $node->delicious_backup_tags[LANGUAGE_NONE] = $categories;
+        $node->created = strtotime((string) $post['time']);
+
+        node_save($node);
+
+        db_update('delicious_bookmarks_backup')
+          ->fields(array('nid' => $node->nid, 'last_found' => time()))
+          ->condition('hash', (string) $post['hash'])
+          ->execute();
+
+        $new++;
+
+      } else {
+
+        $node = node_load($obj['nid']);
+
+        $node->delicious_backup_tags[LANGUAGE_NONE] = $categories;
+        $node->created = strtotime((string) $post['time']);
+
+        node_save($node);
+
+      }
+   }
+  }
+
+  if ($new > 0) watchdog('delicious_backup', 'New %count Bookmark(s) Imported', array('%count' => $new));
+
+}
+
+function _delicious_backup_taxonomie_helper($term_name, $vid) {
+
+  // first paramter can be string or array
+  if (is_string($term_name)) $term_name = array($term_name);
+
+  $b = array();
+  foreach($term_name as $term_str) {
+
+    // look for term and filter it by vocabulary; sry not in drupal core
+    if ($terms = taxonomy_get_term_by_name($term_str)) {
+      foreach($terms as $term) {
+        if ($term->vid == $vid) $b[] = array('tid' => $term->tid);
+     }
+
+    } else {
+
+      // create a new term
+      $edit = array(
+        'name' => $term_str,
+        'description' => '',
+        'parent' => array(0),
+        'vid' =>  $vid,
+      );
+
+      $term = (object) $edit;
+      taxonomy_term_save($term);
+      $b[] = array('tid' => $term->tid);
+
+    }
+  }
+
+  return $b;
+}
+
+function delicious_backup_get_content($link) {
+
+  if (is_numeric($link)) $link = db_query("SELECT bid, hash, href FROM {delicious_bookmarks_backup} WHERE bid = :bid", array(':bid' => $link))->fetchObject();
+  
+  $opts = array(
+    'timeout' => 10,
+  );
+
+  $result = drupal_http_request($link->href, $opts);
+
+  if ($result->code == 200) {
+    //db_update('delicious_bookmarks_backup')->fields(array('content_fetched' => time(), 'html_content' => gzencode ($result->data)))->condition('bid',$bid)->execute();
+    db_update('delicious_bookmarks_backup')->fields(array('response_code' => $result->code, 'content_fetched' => time(), 'content_updated' => time(), 'queued' => 0))->condition('bid', $link->bid)->execute();
+    if (!file_exists('public://delicious_backup')) drupal_mkdir('public://delicious_backup');
+
+    file_put_contents('public://delicious_backup/' . $link->hash, $result->data);
+    
+    module_invoke_all('delicious_backup_updated', $link->bid);
+
+    watchdog('delicious_backup', 'OK getting html content %id - %url ', array('%id' => $link->bid, '%url' => $link->href));
+
+  } else {
+    watchdog('delicious_backup', 'Error getting html content %id - %url ', array('%id' => $link->bid, '%url' => $link->href), WATCHDOG_ALERT);
+    
+    db_update('delicious_bookmarks_backup')
+    ->fields(array(
+      'content_fetched' => time(),
+      'response_code' => $result->code,
+      'queued' => 0,
+    ))
+    ->expression('response_errors', 'response_errors + 1')
+    ->condition('bid', $link->bid)->execute();
+    
+  }
+
+}
+
+function delicious_backup_filter($str, $refilter = false) {
+
+    if (!file_exists('public://HTMLPurifierCache')) drupal_mkdir('public://HTMLPurifierCache');
+
+    require_once drupal_get_path('module', 'delicious_backup') . '/library/HTMLPurifier.auto.php';
+
+    #$config = HTMLPurifier_Config::createDefault();
+    #$purifier = new HTMLPurifier();
+    #$config =HTMLPurifier_Config::createDefault()->getHTMLDefinition(true)->addElement('article', "header", "footer", "aside", array());
+
+    $config = HTMLPurifier_Config::createDefault();
+
+    #$config->getHTMLDefinition(true)->addElement('article', "header", "footer", "aside", array());
+    #$config->set('HTML.Allowed', 'div[id]');
+    #$config->set('AutoFormat.AutoParagraph', true);
+    $config->set('AutoFormat.RemoveEmpty', true);
+    #$config->set('AutoFormat.RemoveEmpty.RemoveNbsp', true);
+
+    if ($refilter == false) {
+      $config->set('Attr.EnableID', true);
+      #$config->set('HTML.EnableAttrID', true);
+      #$config->set('Attr.IDPrefix', 'dsb_');
+      $config->set('HTML.Allowed', 'div[id],ul[id],li[class],ul[class],p,pre,h2,h3,h4,5,br,code,blockquote,article,img[src],img[width],img[alt],img[title],strong,a[href]');
+    } else {
+      $config->set('Attr.EnableID', false);      
+      $config->set('HTML.Allowed', 'div,ul,li,p,pre,h2,h3,h4,h5,br,code,blockquote,b,u,i,ol,strong,a[href],img[src],img[width],img[alt],img[title]');
+    }
+
+    $config->set('Cache.SerializerPath', 'public://HTMLPurifierCache');
+
+    $purifier = new HTMLPurifier($config);
+    return $purifier->purify($str);
 }
 ?>
