@@ -1,0 +1,9 @@
+name = Delicious Bookmark Backup
+description = Backup Delicious Bookmarks Link and Bookmarks Content
+version = VERSION
+core = 7.x
+files[] = delicous_backup.module
+files[] = delicous_backup.install
+files[] = Files/Reader.class.php
+files[] = Files/Readability.php
+files[] = Files/JSLikeHTMLElement.php

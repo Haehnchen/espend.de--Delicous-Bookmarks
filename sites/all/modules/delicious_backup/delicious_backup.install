@@ -1,0 +1,323 @@
+<?php
+
+function delicious_backup_install() {
+
+  // get the translation function relevant to our current localisation
+  $t = get_t();
+  // define the content type as an array (same as in hook_node_info())
+  $article = array(
+    'type' => 'delicious_bookmark',
+    'name' => $t('Delicious Bookmark'),
+    'base' => 'node_content',
+    'description' => $t('Content type to Delicious Bookmarks.'),
+    'body_label' => $t('HTML Content of Bookmarks'),
+    'promote' => 0,
+    'status' => 1,
+    'comment' => 0,
+  );
+
+  // set default values for anything not explicitly defined in the above array
+  $content_type = node_type_set_defaults($article);
+
+  // add the body field to the content type
+  node_add_body_field($content_type, 'Body');
+
+  // create the content type
+  node_type_save($content_type);
+
+  variable_set('node_options_delicious_bookmark', array('status'));
+  // hide comments for this node. http://api.drupal.org/api/drupal/modules--comment--comment.module/7
+  variable_set('comment_delicious_bookmark', 'COMMENT_NODE_HIDDEN');
+
+  // Hide date and author information
+  variable_set('node_submitted_delicious_bookmark', FALSE);
+
+  // Create all the fields we are adding to our content type.
+  // http://api.drupal.org/api/function/field_create_field/7
+  foreach (_delicious_backup_installed_fields() as $field) {
+    field_create_field($field);
+  }
+
+  // Create all the instances for our fields.
+  // http://api.drupal.org/api/function/field_create_instance/7
+  foreach (_delicious_backup_installed_instances() as $instance) {
+    $instance['entity_type'] = 'node';
+    $instance['bundle'] = 'delicious_bookmark';
+    field_create_instance($instance);
+  }
+
+
+
+  // adjust the weight so it's called after a dependant module called 'categories'
+  $weight = db_query("SELECT weight FROM {system} WHERE name = :name", array(':name' => 'categories'))->fetchField();
+  db_update('system')->fields(array(
+    'weight' => $weight + 1,
+  ))
+  ->condition('name', 'delicious_bookmark')
+  ->execute();
+
+  // Create tables.
+
+}
+
+function _delicious_backup_installed_fields() {
+  $t = get_t();
+  $fields = array(
+    // text field
+    'delicious_bookmark_source' => array(
+      'field_name'   => 'delicious_bookmark_source',
+      'label'        => $t('Artcile Source'),
+      'cardinality'  => 1,
+      'type'         => 'text',
+      'settings'     => array(
+        'max_length'  => 1000,
+      ),
+    ),
+    // image field
+    'delicious_bookmark_image' => array(
+      'field_name' => 'delicious_bookmark_image',
+      'label' => $t('Image'),
+      'cardinality' => FIELD_CARDINALITY_UNLIMITED,
+      'type' => 'image',
+      'settings' => array(
+        'default_image' => 0,
+        'uri_scheme' => 'public',
+      ),
+    ),
+    // taxonomy term reference field, referencing a vocabulary called 'authors'
+    'delicious_bookmark_tags' => array(
+      'field_name' => 'delicious_backup_tags',
+      'type' => 'taxonomy_term_reference',
+      'cardinality' => FIELD_CARDINALITY_UNLIMITED,
+      'settings' => array(
+        'allowed_values' => array(
+          array(
+            'vocabulary' => 'delicious_backup_tags',
+            'parent' => 0,
+          ),
+        ),
+      ),
+    ),
+
+  );
+
+  return $fields;
+}
+
+function _delicious_backup_installed_instances() {
+  $t = get_t();
+  $fields = array(
+    // text field
+    'delicious_bookmark_source' => array(
+      'field_name'   => 'delicious_bookmark_source',
+      'label'        => $t('Artcile Source'),
+      'cardinality'  => 1,
+      'type'         => 'text',
+      'settings'     => array(
+        'max_length'  => 1000,
+      ),
+    ),
+    // image field
+    'delicious_bookmark_image' => array(
+      'field_name' => 'delicious_bookmark_image',
+      'label' => $t('Image'),
+      'cardinality' => 1,
+      'type' => 'image',
+      'settings' => array(
+        'default_image' => 0,
+        'uri_scheme' => 'public',
+      ),
+    ),
+    // instance of the taxonomy term reference field above
+    'delicious_backup_tags' => array(
+      'field_name' => 'delicious_backup_tags',
+      'entity_type' => 'node',
+      'label' => $t('Delicious Bookmark Tags'),
+      'bundle' => 'delicious_backup_tags',
+      'required' => FALSE,
+      'widget' => array(
+        'type' => 'taxonomy_autocomplete',
+      ),
+    ),
+
+  );
+
+  return $fields;
+}
+
+
+function delicious_backup_uninstall() {
+
+  //drupal_uninstall_schema('delicious_backup');
+
+  // Gather all the example content that might have been created while this
+  // module was enabled.  Simple selects still use db_query().
+  // http://api.drupal.org/api/function/db_query/7
+  $sql = 'SELECT nid FROM {node} n WHERE n.type = :type';
+  $result = db_query($sql, array(':type' => 'delicious_bookmark'));
+  $nids = array();
+  foreach ($result as $row) {
+    $nids[] = $row->nid;
+  }
+
+  // Delete all the nodes at once
+  // http://api.drupal.org/api/function/node_delete_multiple/7
+  node_delete_multiple($nids);
+
+
+  // Loop over each of the fields defined by this module and delete
+  // all instances of the field, their data, and the field itself.
+  // http://api.drupal.org/api/function/field_delete_field/7
+  foreach (array_keys(_delicious_backup_installed_fields()) as $field) {
+    field_delete_field($field);
+  }
+
+  //$instances = field_info_instances('node', 'delicious_bookmark');
+  //foreach ($instances as $instance_name => $instance) {
+  //    field_delete_instance($instance);
+  //}
+
+  // Delete our content type
+  // http://api.drupal.org/api/function/node_type_delete/7
+  node_type_delete('delicious_bookmark');
+
+  // Purge all field information
+  // http://api.drupal.org/api/function/field_purge_batch/7
+  field_purge_batch(1000);
+
+  variable_del('delicious_backup_username');
+  variable_del('delicious_backup_password');
+  
+  variable_del('delicious_backup_last_cron');
+  variable_del('delicious_backup_cron_time');
+
+
+
+
+
+  $vocabulary = taxonomy_vocabulary_machine_name_load('delicious_backup_tags');
+  taxonomy_vocabulary_delete($vocabulary->vid);
+
+  drupal_set_message('The delicious_backup module was uninstalled successfully.');
+}
+
+
+function delicious_backup_schema() {
+  $schema = array();
+  
+$schema['delicious_bookmarks_backup'] = array(
+  'description' => 'TODO: please describe this table!',
+  'fields' => array(
+    'bid' => array(
+      'description' => 'TODO: please describe this field!',
+      'type' => 'serial',
+      'not null' => TRUE,
+    ),
+    'nid' => array(
+      'description' => 'TODO: please describe this field!',
+      'type' => 'int',
+      'not null' => TRUE,
+      'default' => 0,
+    ),
+    'href' => array(
+      'description' => 'TODO: please describe this field!',
+      'type' => 'varchar',
+      'length' => '255',
+      'not null' => TRUE,
+      'default' => '',
+    ),
+    'hash' => array(
+      'description' => 'TODO: please describe this field!',
+      'type' => 'varchar',
+      'length' => '64',
+      'not null' => TRUE,
+      'default' => '',
+    ),
+    'description' => array(
+      'description' => 'TODO: please describe this field!',
+      'type' => 'varchar',
+      'length' => '400',
+      'not null' => TRUE,
+      'default' => '',
+    ),
+    'time' => array(
+      'description' => 'TODO: please describe this field!',
+      'type' => 'int',
+      'not null' => FALSE,
+      'default' => 0,
+    ),
+    'extended' => array(
+      'description' => 'TODO: please describe this field!',
+      'type' => 'text',
+      'not null' => FALSE,
+    ),
+    'tag' => array(
+      'description' => 'TODO: please describe this field!',
+      'type' => 'varchar',
+      'length' => '255',
+      'not null' => TRUE,
+      'default' => '',
+    ),
+    'meta' => array(
+      'description' => 'TODO: please describe this field!',
+      'type' => 'varchar',
+      'length' => '64',
+      'not null' => TRUE,
+      'default' => '',
+    ),
+    'last_found' => array(
+      'description' => 'TODO: please describe this field!',
+      'type' => 'int',
+      'not null' => TRUE,
+      'default' => 0,
+    ),
+    'content_fetched' => array(
+      'description' => 'TODO: please describe this field!',
+      'type' => 'int',
+      'not null' => TRUE,
+      'default' => 0,
+    ),
+    'response_code' => array(
+      'description' => 'TODO: please describe this field!',
+      'type' => 'int',
+      'not null' => TRUE,
+      'default' => 0,
+    ),
+  ),
+  'primary key' => array('bid'),
+  'unique keys' => array(
+    'href' => array('href')
+  ),
+  'indexes' => array(
+    'nid' => array('nid'),
+    'response_code' => array('response_code'),
+  ),
+);
+
+return $schema;
+
+}
+
+function delicious_backup_enable() {
+  // If we enable forum at the same time as taxonomy we need to call
+  // field_associate_fields() as otherwise the field won't be enabled until
+  // hook modules_enabled is called which takes place after hook_enable events.
+  field_associate_fields('taxonomy');
+  // Create the forum vocabulary if it does not exist.
+
+  $vocabulary = taxonomy_vocabulary_machine_name_load('delicious_backup_tags');
+  if (!$vocabulary) {
+    $edit = array(
+      'name' => t('Delicious Backup Tags'),
+      'machine_name' => 'delicious_backup_tags',
+      'description' => t('Delicious Backup vocabulary'),
+      'hierarchy' => 1,
+      'module' => 'delicious_backup',
+      'weight' => -10,
+    );
+    $vocabulary = (object) $edit;
+    taxonomy_vocabulary_save($vocabulary);
+  }
+}
+
+?>
