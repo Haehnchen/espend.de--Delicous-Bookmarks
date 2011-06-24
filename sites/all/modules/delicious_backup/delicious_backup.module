@@ -183,9 +183,9 @@ function _delicious_backup_full_worker() {
 
 function delicious_backup_cron() {
   
- delicious_backup_get_content(1242);
-  delicious_backup_update_node(1242, true);
-  exit;
+  //delicious_backup_get_content(1242);
+  //delicious_backup_update_node(1242, true);
+  //exit;
  
 
   
@@ -225,9 +225,13 @@ function delicious_backup_get_images(&$node, $html, $url) {
 }
 
 function _delicious_backup_replace_img_src($node, $content) {
+  
+    if (!$field = field_get_items('node', $node, 'delicious_bookmark_image', $node->language)) {
+      return $content;
+    }
 
     $imgs = array();
-    foreach(field_get_items('node', $node, 'delicious_bookmark_image', $node->language) as $img) {
+    foreach($field as $img) {
       $imgs[$img['filename']] = array(
         'width' => '200',
         'src' => file_create_url($img['uri']),
