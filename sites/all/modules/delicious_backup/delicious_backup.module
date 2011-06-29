@@ -399,17 +399,22 @@ function delicious_backup_import_bookmarks() {
           ->fields(array('nid' => $node->nid, 'last_found' => time()))
           ->condition('hash', (string) $post['hash'])
           ->execute();
+        
+        watchdog('delicious_backup', 'New node %bid', array('%bid' => $obj->bid));
 
         $new++;
 
       } else {
 
-        $node = node_load($obj['nid']);
-
-        $node->delicious_backup_tags[LANGUAGE_NONE] = $categories;
-        $node->created = strtotime((string) $post['time']);
-
-        node_save($node);
+        if ($node = node_load($obj['nid'])) {
+          $node->delicious_backup_tags[LANGUAGE_NONE] = $categories;
+          $node->created = strtotime((string) $post['time']);
+          
+          node_save($node);
+        } else {
+          watchdog('delicious_backup', 'Resetting Bookmark %bid ', array('%bid' => $obj['bid']));
+          db_update('delicious_bookmarks_backup')->fields(array('nid' => 0))->condition('bid', $obj['bid'])->execute();          
+        }
 
       }
    }
