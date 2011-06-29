@@ -5,6 +5,34 @@ require_once drupal_get_path('module', 'delicious_backup') . '/Files/DeliciousBa
 require_once drupal_get_path('module', 'delicious_backup') . '/Files/Readability.php';
 require_once drupal_get_path('module', 'delicious_backup') . '/Files/url_to_absolute.merge.php';
 
+function delicious_backup_node_display_access($node) {
+  return $node->type == 'delicious_bookmark' && user_access('view content');
+}
+
+
+function delicious_backup_node_display($node) {
+  
+  $getimages = true;
+  
+  $obj = db_query("SELECT nid,bid,hash,href FROM {delicious_bookmarks_backup} WHERE nid = :nid", array(':nid' => $node->nid))->fetchObject();
+  
+  $file = 'public://delicious_backup/' . $obj->hash;
+
+  if (!$html = file_get_contents($file)) {
+    watchdog('delicious_backup', 'Error getting hash file %id - %url ', array('%id' => $obj->bid, '%url' => $obj->href));
+    return false;
+  }
+
+  _delicious_back_preload($html);
+  
+  $content = DeliciousBackup::Readability($html);
+  $content = mb_convert_encoding($content, 'HTML-ENTITIES', "UTF-8");
+
+
+  #$content = delicious_backup_filter($content);  
+  
+  return $content;
+}
 
 function delicious_backup_autoload_info() {
   return array(
@@ -12,6 +40,36 @@ function delicious_backup_autoload_info() {
   );
 }
 
+function _delicious_back_preload($content) {
+  //
+  if (preg_match_all('@<script src="(http://gist.github.com/(\d+).js)"></script>@i', $content, $match, PREG_SET_ORDER)) {
+    foreach($match as $git_code) {
+      $req = drupal_http_request($git_code[1]);
+      if (isset($req->data)) {
+        if (preg_match_all("@document.write\('(.*?)'\)@i", $req->data, $codes, PREG_SET_ORDER)) {
+          $test = print_r($codes, true);
+          
+          $cody = '';
+          foreach($codes as $key=>$code) {
+
+            $code[1] = strtr($code[1], array('\r\n' => "\r\n", '\r' => '\n', '\n' => "\n"));
+            $cody .= stripslashes($code[1]);
+          }
+          #echo $cody; exit;
+          $content = str_replace($git_code[0], $cody, $content);
+        }
+
+      }
+    }
+    
+  }
+
+}
+
+/*
+ * Implements hook_menu()
+ * 
+ */
 function delicious_backup_menu() {
   // administrative items
   $items['admin/config/services/delicious'] = array(
@@ -60,6 +118,16 @@ function delicious_backup_menu() {
     'file' => 'delicious_backup.admin.inc',
   );
 
+  $items['node/%node/bookmark'] = array(
+      'title' => 'Bookmark',
+      'access callback'=>'delicious_backup_node_display_access',
+      'access arguments'=>array(1),
+      'page callback' => 'delicious_backup_node_display',
+      'page arguments' => array(1),
+      'type' => MENU_LOCAL_TASK,
+      'weight' => 4,
+  );  
+  
   return $items;
 }
 
