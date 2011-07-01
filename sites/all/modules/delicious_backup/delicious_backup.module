@@ -40,30 +40,31 @@ function delicious_backup_autoload_info() {
   );
 }
 
-function _delicious_back_preload($content) {
+function _delicious_back_preload(&$content) {
   //
-  if (preg_match_all('@<script src="(http://gist.github.com/(\d+).js)"></script>@i', $content, $match, PREG_SET_ORDER)) {
-    foreach($match as $git_code) {
-      $req = drupal_http_request($git_code[1]);
-      if (isset($req->data)) {
-        if (preg_match_all("@document.write\('(.*?)'\)@i", $req->data, $codes, PREG_SET_ORDER)) {
-          $test = print_r($codes, true);
-          
-          $cody = '';
-          foreach($codes as $key=>$code) {
-
-            $code[1] = strtr($code[1], array('\r\n' => "\r\n", '\r' => '\n', '\n' => "\n"));
-            $cody .= stripslashes($code[1]);
-          }
-          #echo $cody; exit;
-          $content = str_replace($git_code[0], $cody, $content);
-        }
-
-      }
-    }
+  if (!preg_match_all('@<script src="(http://gist.github.com/(\d+).js)"></script>@i', $content, $match, PREG_SET_ORDER))
+    return;
+  
+  // walk through all javascript code snippets
+  foreach ($match as $git_code) {
     
-  }
+    // request javascript file and filter out code
+    $req = drupal_http_request($git_code[1]);
+    if (isset($req->data) AND preg_match_all("@document.write\('(.*?)'\)@i", $req->data, $codes, PREG_SET_ORDER)) {
+      $cody = '';
+      foreach ($codes as $key => $code) {
 
+        //$code[1] = stripslashes(strtr($code[1], array('\r\n' => "\r\n", '\r' => '\n', '\n' => "\n")));
+        if (preg_match('@<a href="(.*gist\.github.*)"[ ]@i', stripslashes($code[1]), $res)) {
+          $req1 = drupal_http_request($res[1]);
+          if (isset($req1->data)) $cody .= '<pre>' . htmlentities($req1->data) . '</pre>';
+        }
+      }
+
+      // replace content
+      $content = str_replace($git_code[0], $cody, $content);
+    }
+  }
 }
 
 /*
