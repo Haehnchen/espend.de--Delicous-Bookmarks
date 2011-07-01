@@ -56,8 +56,7 @@ function _delicious_back_preload(&$content) {
       
       // replace external javascript file with raw source code
       if (isset($req1->data)) {
-        $cody .= '<pre>' . htmlentities($req1->data) . '</pre>';
-        $content = str_replace($git_code[0], $cody, $content);
+        $content = str_replace($git_code[0], '<pre>' . htmlentities($req1->data) . '</pre>', $content);
       }
      
     }
