@@ -13,7 +13,7 @@ class DeliciousBackup {
     $res = drupal_http_request($url . $type, array('headers' => self::RequestHeaders()));
     return $res->data;     
   }
-  
+
   static function CreateDOM($html) {
     
     $oldSetting = libxml_use_internal_errors(true);

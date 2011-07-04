@@ -40,6 +40,16 @@ function delicious_backup_autoload_info() {
   );
 }
 
+function _delicious_back_preload2(&$content) {
+  
+  #if (preg_match("/<code>.*(<br(|\s*\/)>).*<\/code>/m", $content, $res)) {
+  #  $content = preg_replace("/(<br(|\s*\/)>)/", "\n", $content);
+  #}  
+
+  #drupal_add_css('code { white-space: pre; background-color:red;} ', 'inline');
+  
+}
+
 function _delicious_back_preload(&$content) {
   
   //check for external gist scripts
@@ -120,6 +130,16 @@ function delicious_backup_menu() {
       'access callback'=>'delicious_backup_node_display_access',
       'access arguments'=>array(1),
       'page callback' => 'delicious_backup_node_display',
+      'page arguments' => array(1),
+      'type' => MENU_LOCAL_TASK,
+      'weight' => 4,
+  );
+  
+  $items['node/%node/bookmark_update'] = array(
+      'title' => 'Bookmark Update',
+      'access callback'=>'delicious_backup_node_display_access',
+      'access arguments'=>array(1),
+      'page callback' => 'delicious_backup_node_update',
       'page arguments' => array(1),
       'type' => MENU_LOCAL_TASK,
       'weight' => 4,
@@ -244,6 +264,13 @@ function _delicious_backup_full_worker() {
     delicious_backup_update_node($item->data);
     $queue->deleteItem($item);
   }     
+}
+
+function delicious_backup_node_update($node) {
+  $bid = db_query("SELECT bid FROM {delicious_bookmarks_backup} WHERE nid = :nid", array(':nid' => $node->nid))->fetchField();
+  
+  delicious_backup_update_node($bid, true);
+  return 'updated';
 }
 
 function delicious_backup_cron() {
@@ -465,7 +492,7 @@ function delicious_backup_import_bookmarks() {
           ->condition('hash', (string) $post['hash'])
           ->execute();
         
-        watchdog('delicious_backup', 'New node %bid', array('%bid' => $obj->bid));
+        watchdog('delicious_backup', 'New node %bid', array('%bid' => $obj['bid']));
 
         $new++;
 
