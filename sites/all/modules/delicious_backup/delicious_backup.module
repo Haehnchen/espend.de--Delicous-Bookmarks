@@ -5,39 +5,11 @@ require_once drupal_get_path('module', 'delicious_backup') . '/Files/DeliciousBa
 require_once drupal_get_path('module', 'delicious_backup') . '/Files/Readability.php';
 require_once drupal_get_path('module', 'delicious_backup') . '/Files/url_to_absolute.merge.php';
 
-function delicious_backup_node_display_access($node) {
+// hooks
+require_once drupal_get_path('module', 'delicious_backup') . '/delicious_backup.hooks.inc';
+
+function delicious_backup_bookmark_access($node) {
   return $node->type == 'delicious_bookmark' && user_access('view content');
-}
-
-
-function delicious_backup_node_display($node) {
-  
-  $getimages = true;
-  
-  $obj = db_query("SELECT nid,bid,hash,href FROM {delicious_bookmarks_backup} WHERE nid = :nid", array(':nid' => $node->nid))->fetchObject();
-  
-  $file = 'public://delicious_backup/' . $obj->hash;
-
-  if (!$html = file_get_contents($file)) {
-    watchdog('delicious_backup', 'Error getting hash file %id - %url ', array('%id' => $obj->bid, '%url' => $obj->href));
-    return false;
-  }
-
-  _delicious_back_preload($html);
-  
-  $content = DeliciousBackup::Readability($html);
-  $content = mb_convert_encoding($content, 'HTML-ENTITIES', "UTF-8");
-
-
-  #$content = delicious_backup_filter($content);  
-  
-  return $content;
-}
-
-function delicious_backup_autoload_info() {
-  return array(
-    'DeliciousImport' => array('file' => 'sites/all/modules/delicious_backup/DeliciousImport.class.php'),
-  );
 }
 
 function _delicious_back_preload2(&$content) {
@@ -73,172 +45,6 @@ function _delicious_back_preload(&$content) {
   }
 }
 
-/*
- * Implements hook_menu()
- * 
- */
-function delicious_backup_menu() {
-  // administrative items
-  $items['admin/config/services/delicious'] = array(
-    'title' => 'Delicious Bookmarks Settings',
-    'description' => 'Settings und workers for Delicious Bookmarks.',
-    'access arguments' => array('administer delicious'),
-    'page callback' => 'drupal_get_form',
-    'page arguments' => array('delicious_backup_data'),
-    'file' => 'delicious_backup.admin.inc',
-    #'type' => MENU_NORMAL_ITEM,
-  );
-
-  $items['admin/config/services/delicious/account'] = array(
-    'title' => 'Account',
-    'type' => MENU_DEFAULT_LOCAL_TASK,
-    'weight' => -10,
-  );
-
-  $items['admin/config/services/delicious/sync'] = array(
-    'title' => 'Sync/Import Bookmarks',
-    'page callback' => 'drupal_get_form',
-    'page arguments' => array('delicious_backup_sync'),
-    'access arguments' => array('administer delicious'),
-    'type' => MENU_LOCAL_TASK,
-    'weight' => 30,
-    'file' => 'delicious_backup.admin.inc',
-  );
-
-  $items['admin/config/services/delicious/body_update'] = array(
-    'title' => 'Update Content',
-    'page callback' => 'drupal_get_form',
-    'page arguments' => array('delicious_backup_body'),
-    'access arguments' => array('administer delicious'),
-    'type' => MENU_LOCAL_TASK,
-    'weight' => 40,
-    'file' => 'delicious_backup.admin.inc',
-  );
-
-  $items['admin/config/services/delicious/html_import'] = array(
-    'title' => 'Import HTML',
-    'page callback' => 'drupal_get_form',
-    'page arguments' => array('delicious_backup_html_import'),
-    'access arguments' => array('administer delicious'),
-    'type' => MENU_LOCAL_TASK,
-    'weight' => 40,
-    'file' => 'delicious_backup.admin.inc',
-  );
-
-  $items['node/%node/bookmark'] = array(
-      'title' => 'Bookmark',
-      'access callback'=>'delicious_backup_node_display_access',
-      'access arguments'=>array(1),
-      'page callback' => 'delicious_backup_node_display',
-      'page arguments' => array(1),
-      'type' => MENU_LOCAL_TASK,
-      'weight' => 4,
-  );
-  
-  $items['node/%node/bookmark_update'] = array(
-      'title' => 'Bookmark Update',
-      'access callback'=>'delicious_backup_node_display_access',
-      'access arguments'=>array(1),
-      'page callback' => 'delicious_backup_node_update',
-      'page arguments' => array(1),
-      'type' => MENU_LOCAL_TASK,
-      'weight' => 4,
-  );  
-  
-  return $items;
-}
-
-/**
- * Implements hook_block_info().
- */
-function delicious_backup_block_info() {
-  $blocks = array();
-
-  $blocks['delicious_info'] = array(
-    'info' => t('Delicious Node Info'),
-    'cache' => DRUPAL_CACHE_PER_PAGE,
-    #'pages' => 'node/*', // Not usually provided here.
-  );
-
-  return $blocks;
-}
-
-/**
- * Implements hook_block_view().
- */
-function delicious_backup_block_view($delta = '') {
-  global $user;
-
-//  if ($delta == 'delicious_info') {
-    $block = array();
-
-    $nid = arg(1);
-    if (!is_numeric($nid)) return;
-    
-    $obj = db_query("SELECT * FROM {delicious_bookmarks_backup} WHERE nid = :nid", array(':nid' => $nid))->fetchAssoc();
-
-    $list = array(
-       'link' => l($obj['href'], $obj['href']),
-       'extended' => $obj['extended'],
-       'last_update' => format_date($obj['content_fetched']),
-       'delicious_added' => format_date($obj['time']),
-       'delicious_sync' => format_date($obj['last_found']),
-       'status' => $obj['response_code'] == 200 ? 'OK' : 'offline',
-    );
-
-    if ($user->uid ==1) {
-      $list['bid'] = $obj['bid'];
-      $list['hash'] = $obj['hash'];
-    }
-
-    $str=array();
-    foreach($list as $key => $value) {
-      if ($value != '') $str[]= '<span class="key '.$key.'">' . ucwords($key) . '</span>: ' . '<span class="value">' . $value . '</span>';
-    }
-
-    $block['content'] = '<div class="iphone-header">'. theme('item_list', array('items' => $str)) .'</div>' ;
-    return $block;
-//  }
-}
-
-
-/**
- * Implements hook_cron_queue_info().
- */
-function delicious_backup_cron_queue_info() {
-  $queues = array();
-  
-  $queues['delicious_backup_get_content'] = array(
-    'worker callback' => 'delicious_backup_get_content',
-    'time' => 15,
-  );
-  
-  $queues['delicious_backup_update_node'] = array(
-    'worker callback' => 'delicious_backup_update_node',
-    'time' => 15,
-  );  
-  
-  return $queues;
-}
-
-/**
- * Implements hook_node_delete().
- */
-function delicious_backup_node_delete($node) {
-  if  ($node->type == 'delicious_bookmark') {
-    
-    // delete html file
-    $hash = db_query("SELECT hash FROM {delicious_bookmarks_backup} WHERE nid = :nid", array(':nid' => $node->nid))->fetchField();
-    if (file_exists('public://delicious_backup/' . $hash)) unlink('public://delicious_backup/' . $hash);
-    
-    // reset bookmark
-    db_merge('delicious_bookmarks_backup')
-      ->key(array('nid' => $node->nid))
-      ->fields(array('nid' => 0))
-      ->execute();
-  }
-}
-
 /**
  * Implements hook_delicious_backup_updated().
  */
@@ -266,43 +72,6 @@ function _delicious_backup_full_worker() {
   }     
 }
 
-function delicious_backup_node_update($node) {
-  $bid = db_query("SELECT bid FROM {delicious_bookmarks_backup} WHERE nid = :nid", array(':nid' => $node->nid))->fetchField();
-  
-  delicious_backup_update_node($bid, true);
-  return 'updated';
-}
-
-function delicious_backup_cron() {
-  
-  //delicious_backup_get_content(1242);
-  //delicious_backup_update_node(1242, true);
-  //exit;
- 
-
-  
-  /* fetch all bookmarks */
-  $cron_time = time() - variable_get('delicious_backup_last_cron', 0);
-  if ($cron_time > (variable_get('delicious_backup_cron_time', 60*60*12))) delicious_backup_import_bookmarks();
-  variable_set('delicious_backup_last_cron', time());
-
-  
-  /* fetch html content worker */
-  //http://api.drupal.org/api/drupal/modules--aggregator--aggregator.module/function/aggregator_cron/7
-  //http://api.drupal.org/api/drupal/modules--aggregator--aggregator.module/function/aggregator_refresh/7
-  $result = db_query_range("SELECT bid FROM {delicious_bookmarks_backup} WHERE response_code != :response_code AND response_errors < 4 AND queued = 0", 0, 20100, array(
-    ':response_code' => 200,
-  ));
-
-  $queue = DrupalQueue::get('delicious_backup_get_content') ;
-  $queue->createQueue();
-  foreach ($result as $record) {
-    $queue->createItem($record->bid);
-    db_update('delicious_bookmarks_backup')->fields(array('queued' => REQUEST_TIME))->condition('bid', $record->bid)->execute();
-  }
-
-}
-
 function delicious_backup_get_images(&$node, $html, $url) {
     
   $r = new Reader($url, $html);
@@ -319,7 +88,8 @@ function delicious_backup_get_images(&$node, $html, $url) {
 function _delicious_backup_replace_img_src($node, $content) {
   
     if (!$field = field_get_items('node', $node, 'delicious_bookmark_image', $node->language)) {
-      return $content;
+      $field = array();
+      //return $content;
     }
 
     $imgs = array();
@@ -446,7 +216,12 @@ function delicious_backup_import_bookmarks() {
   $vid = taxonomy_vocabulary_machine_name_load('delicious_backup_tags')->vid;
 
   // load bookmarks from delicious
-  $xml = new SimpleXMLElement(DeliciousBackup::GetResponse('posts/all?'));
+  if (!$bookmarks = DeliciousBackup::GetResponse('posts/all?')) {
+    watchdog('delicious_backup', 'could not import bookmarks from delicous'); 
+    return false;
+  }
+  
+  $xml = new SimpleXMLElement($bookmarks);
 
   $new = 0;
   foreach ($xml->post as $post) {
@@ -587,7 +362,23 @@ function delicious_backup_get_content($link) {
 
 }
 
-function delicious_backup_filter($str, $refilter = false) {
+function delicious_backup_filter($str, $refilter = false, $node = false) {
+  
+    require_once drupal_get_path('module', 'delicious_backup') . '/Files/htmLawed.php';
+
+    
+    $config = array('safe'=>1, 'elements'=>'img, h1, h2, h3, h4 ,h5, a, em, b, strong, cite, code, ol, ul, li, dl, dt, dd, p, div, span, code, blockquote, pre', 'deny_attribute'=>'id, style, class');
+    $text = htmLawed($str, $config);
+    $text = _delicious_backup_replace_img_src($node, $text);
+  
+  #  $node111 = node_load($node->nid);
+  #$node111->body[$node->language][0]['value'] = $text;
+  #$node111->body[$node->language][0]['format'] = 'full_html';
+
+  #node_save($node);    
+    return _filter_autop($text);
+  
+    return '';
 
     if (!file_exists('public://HTMLPurifierCache')) drupal_mkdir('public://HTMLPurifierCache');
 

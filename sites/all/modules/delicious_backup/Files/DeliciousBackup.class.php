@@ -11,6 +11,10 @@ class DeliciousBackup {
   static function GetResponse($type = 'posts/all?') {
     $url = "https://". variable_get('delicious_backup_username') .":". variable_get('delicious_backup_password') ."@api.del.icio.us/v1/";
     $res = drupal_http_request($url . $type, array('headers' => self::RequestHeaders()));
+    #print_r($res); exit;
+    
+    if ($res->code != 200) return false;
+    
     return $res->data;     
   }
 

@@ -182,7 +182,7 @@ function delicious_backup_html_import_submit($form, &$form_state) {
 
 
 function delicious_backup_batch_process($callback, &$context) {
-  $def = ($callback == 'delicious_backup_update_node') ? '=' : '!=';
+  $def = ($callback == 'delicious_backup_update_node' OR $callback == 'delicious_backup_update_node') ? '=' : '!=';
   if (empty($context['sandbox'])) {
     $context['sandbox']['progress'] = 0;
     $context['sandbox']['current_node'] = 0;
