@@ -96,40 +96,33 @@ function delicious_backup_body() {
 
   $form['update'] = array(
     '#type' => 'checkbox',
-    '#title' => t('Please import all Bookmarks from Delicius now') . db_select('delicious_bookmarks_backup')->countQuery()->execute()->fetchField(),
+    '#title' => t('Update body content from: ') . db_select('delicious_bookmarks_backup')->countQuery()->execute()->fetchField() . ' nodes',
     #'#options' => array(),
     #'#default_value' => array(),
   );
 
   $form['submit'] = array(
     '#type' => 'submit',
-    '#value' => t('Sync Now'),
+    '#value' => t('Update'),
   );
 
   return $form;
 }
 
 function delicious_backup_body_submit($form, &$form_state) {
-  if(isset($form_state['values']['update']) AND $form_state['values']['update'] == 1) {
-    #drupal_set_message('Nodes and Bookmarks are updated / imported. Check logs for further information.');
-    #delicious_backup_import_raw();
-
-    $callback = 'delicious_backup_update_node';
-    $batch = array(
-      'title' => t('Updating body content'),
-      'operations' => array(
-        //array('delicious_backup_node_update_batch_start', array()),
-        array('delicious_backup_batch_process', array($callback)),
-      ),
-      //'finished' => 'delicious_backup_node_update_batch_finished',
-      'file' => drupal_get_path('module', 'delicious_backup') . '/delicious_backup.admin.inc',
-    );
-
-    batch_set($batch);
-
-  } else {
-    drupal_set_message('Nothing to do, please activate checkbox to import bookmarks.', 'warning');
+  
+  if(isset($form_state['values']['update']) AND $form_state['values']['update'] != 1) {
+     drupal_set_message('Nothing to do, please activate checkbox to import bookmarks.', 'warning');
+     return;
   }
+
+  $batch = array(
+    'title' => t('Updating body content'),
+    'operations' => array(array('delicious_backup_batch_process', array('delicious_backup_update_node'))),
+    'file' => drupal_get_path('module', 'delicious_backup') . '/delicious_backup.admin.inc',
+  );
+
+  batch_set($batch);
 }
 
 
@@ -211,5 +204,4 @@ function delicious_backup_batch_process($callback, &$context) {
     $context['finished'] = $context['sandbox']['progress'] / $context['sandbox']['max'];
   }
 }
-
 ?>

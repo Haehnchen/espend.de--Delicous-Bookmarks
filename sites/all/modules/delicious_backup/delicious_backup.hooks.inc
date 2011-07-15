@@ -132,7 +132,6 @@ function delicious_backup_block_view($delta = '') {
 
 function delicious_backup_cron() {
   
-  return false;
   
   //delicious_backup_get_content(1242);
   //delicious_backup_update_node(1242, true);

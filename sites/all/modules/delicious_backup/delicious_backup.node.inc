@@ -30,8 +30,8 @@ function delicious_backup_bookmark_dsp($node) {
   $content = mb_convert_encoding($content, 'HTML-ENTITIES', "UTF-8");
 
 
-  $content = delicious_backup_filter($content, false, $node);  
-  
+  $content = delicious_backup_filter($content, false, $node);
+
   $test = node_load($node->nid);
   $test->body[$test->language][0]['value'] = $content;
   $test->body[$test->language][0]['format'] = 'full_html';

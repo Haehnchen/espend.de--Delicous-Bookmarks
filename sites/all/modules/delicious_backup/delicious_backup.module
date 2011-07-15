@@ -112,49 +112,68 @@ function delicious_backup_update_node($obj, $getimages = false) {
 
   $getimages = true;
   
-  if (is_numeric($obj)) $obj = db_query("SELECT nid,bid,hash,href FROM {delicious_bookmarks_backup} WHERE bid = :bid", array(':bid' => $obj))->fetchObject();
+  try {
+    
+    if (is_numeric($obj)) $obj = db_query("SELECT nid,bid,hash,href FROM {delicious_bookmarks_backup} WHERE bid = :bid", array(':bid' => $obj))->fetchObject();
+
+    $file = 'public://delicious_backup/' . $obj->hash;
+
+    // validate file
+    if (!file_exists($file)) throw new Exception('no file content');
+    if (_delicious_backup_IsBinary($file)) throw new Exception('file is binary'); //@TODO: PDF download or other?
+    if (!$html = file_get_contents($file)) throw new Exception('error reading hash file');
+    if (strlen($html) == 0) throw new Exception('zero content');
+    if ($obj->nid == 0) throw new Exception('no node nid found');
+
+    $content = DeliciousBackup::Readability($html);
+    $content = mb_convert_encoding($content, 'HTML-ENTITIES', "UTF-8");
+
+    $node = node_load($obj->nid);
+
+    if ($getimages == true) {
+      $path = drupal_get_path('module', 'delicious_backup');    
+      //require_once $path.'/Files/Reader.class.php';    
+      delicious_backup_get_images($node, $content, $obj->href);
+
+      $content = _delicious_backup_replace_img_src($node, $content);
+
+    }
+
+    $content = delicious_backup_filter($content, false, $node);
+
+    $node = node_load($obj->nid);
+    $node->body[$node->language][0]['value'] = $content;
+    $node->body[$node->language][0]['format'] = 'full_html';
+
+    node_save($node);
   
-  $file = 'public://delicious_backup/' . $obj->hash;
-
-  if (!file_exists($file)) {
-    watchdog('delicious_backup', 'No content for %id - %url ', array('%id' => $obj->bid, '%url' => $obj->href));
-    return false;    
-  }
-
-  if (!$html = file_get_contents($file)) {
-    watchdog('delicious_backup', 'Error getting hash file %id - %url ', array('%id' => $obj->bid, '%url' => $obj->href));
+    return true;
+  
+  } catch (Exception $e) {
+    watchdog('delicious_backup', 'error on bid: ' . $obj->bid . ' ' . $e->getMessage());
     return false;
-  }
+  }  
   
-  if (strlen($html) == 0) {
-    watchdog('delicious_backup', 'Zero content for %id - %url ', array('%id' => $obj->bid, '%url' => $obj->href));
-    return false;    
-  }
-
-  $content = DeliciousBackup::Readability($html);
-  $content = mb_convert_encoding($content, 'HTML-ENTITIES', "UTF-8");
-
-  $node = node_load($obj->nid);
-
-  if ($getimages == true) {
-    $path = drupal_get_path('module', 'delicious_backup');    
-    //require_once $path.'/Files/Reader.class.php';    
-    delicious_backup_get_images($node, $content, $obj->href);
-    
-    $content = _delicious_backup_replace_img_src($node, $content);
-    
-  }
-
-  $content = delicious_backup_filter($content);
-
-  $node = node_load($obj->nid);
-  $node->body[$node->language][0]['value'] = $content;
-  $node->body[$node->language][0]['format'] = 'full_html';
-
-  node_save($node);
-  
-  return true;
 }
+
+function _delicious_backup_IsBinary($file) { 
+  if (file_exists($file)) { 
+    if (!is_file($file)) return 0; 
+
+    $fh  = fopen($file, "r"); 
+    $blk = fread($fh, 512); 
+    fclose($fh); 
+    clearstatcache(); 
+
+    return ( 
+      //0 or substr_count($blk, "^ -~", "^\r\n")/512 > 0.3 
+        substr_count($blk, "\x00") > 0 
+    ); 
+  } 
+  return 0; 
+} 
+
+
 
 function _delicious_backup_get_image(&$node, $img_ar) {
 
@@ -366,19 +385,13 @@ function delicious_backup_filter($str, $refilter = false, $node = false) {
   
     require_once drupal_get_path('module', 'delicious_backup') . '/Files/htmLawed.php';
 
-    
-    $config = array('safe'=>1, 'elements'=>'img, h1, h2, h3, h4 ,h5, a, em, b, strong, cite, code, ol, ul, li, dl, dt, dd, p, div, span, code, blockquote, pre', 'deny_attribute'=>'id, style, class');
-    $text = htmLawed($str, $config);
-    $text = _delicious_backup_replace_img_src($node, $text);
-  
-  #  $node111 = node_load($node->nid);
-  #$node111->body[$node->language][0]['value'] = $text;
-  #$node111->body[$node->language][0]['format'] = 'full_html';
+    $config = array('safe'=>1, 'elements'=>'div, br, img, h1, h2, h3, h4 ,h5, a, em, b, strong, cite, code, ol, ul, li, dl, dt, dd, p, div, span, code, blockquote, pre', 'deny_attribute'=>'id, style, class');
 
-  #node_save($node);    
+    $text = htmLawed($str, $config);
+    
+    if ($node) $text = _delicious_backup_replace_img_src($node, $text);
+
     return _filter_autop($text);
-  
-    return '';
 
     if (!file_exists('public://HTMLPurifierCache')) drupal_mkdir('public://HTMLPurifierCache');
 

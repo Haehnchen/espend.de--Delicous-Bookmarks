@@ -74,29 +74,37 @@ class DeliciousBackup {
   }  
   
   static function Readability($html) {
-    
-    // give it to Readability
-    $readability = new Readability($html);
-    // print debug output?
-    // useful to compare against Arc90's original JS version -
-    // simply click the bookmarklet with FireBug's console window open
-    $readability->debug = false;
-    // convert links to footnotes?
-    #$readability->convertLinksToFootnotes = true;
-    // process it
-    $result = $readability->init();
-    // does it look like we found what we wanted?
-    if ($result) {
-      #echo "== Title =====================================\n";
-      #echo $readability->getTitle()->textContent, "\n\n";
-      #echo "== Body ======================================\n";
-      $content = $readability->getContent()->innerHTML;
-      // if we've got Tidy, let's clean it up for output
-    } else {
-     $content = false;
-    }
+    try {
 
-    return $content;
+      // give it to Readability
+      $readability = new Readability($html);
+      // print debug output?
+      // useful to compare against Arc90's original JS version -
+      // simply click the bookmarklet with FireBug's console window open
+      $readability->debug = false;
+      // convert links to footnotes?
+      #$readability->convertLinksToFootnotes = true;
+      // process it
+      $result = $readability->init();
+      // does it look like we found what we wanted?
+      if ($result) {
+        #echo "== Title =====================================\n";
+        #echo $readability->getTitle()->textContent, "\n\n";
+        #echo "== Body ======================================\n";
+        $content = $readability->getContent()->innerHTML;
+        // if we've got Tidy, let's clean it up for output
+      } else {
+       $content = false;
+      }
+      
+      // replace readability div value wrapper
+      $content = preg_replace(array("/^\<div readability=\"[0-9\. ]+\">/si", "!</div>$!si"), "", $content);
+      return $content;
+    
+    } catch (Exception $e) {
+      return false;
+    }    
+    
   }
   
 }

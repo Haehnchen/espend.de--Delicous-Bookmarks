@@ -110,7 +110,7 @@ class Reader {
 
     }
 
-    return $doc->saveHTML();
+    return $this->myinnerHTML($doc);
   }
 
   private function _is_img_url($url) {
@@ -176,7 +176,7 @@ class Reader {
     }
 
 
-    return $doc->saveHTML();
+    return $this->myinnerHTML($doc);
   }  
   
   function GetPaseUrl($fallbackurl = '') {
@@ -199,6 +199,16 @@ class Reader {
 
     return false;
   }
+  
+  private function myinnerHTML($doc){
+    //http://svn.beerpla.net/repos/public/PHP/SmartDOMDocument/trunk/SmartDOMDocument.class.php
+    $content = preg_replace(array("/^\<\!DOCTYPE.*?<html><body>/si", "!</body></html>$!si"), "", $doc->saveHTML());
+		return $content;    
+  }  
 
 }
+
+
+
+
 ?>
