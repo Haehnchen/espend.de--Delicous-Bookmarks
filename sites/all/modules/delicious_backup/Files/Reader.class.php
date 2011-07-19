@@ -4,12 +4,174 @@ class Reader {
   var $html = '';
   var $url = '';
   var $content = '';
+  var $node = null;
+  var $nid = null;
+  var $getimages = true;
+  var $obj = null;
+  
+  var $logArray = array();
+  
+  
 
-  function __construct($url = '', $html = '', $content = '') {
-    $this->html = $html;
-    $this->url = $url;
-    $this->content = $content;
+  function __construct($node, $cache = false) {
+    
+    $this->node = $node;
+    $this->obj = db_query("SELECT nid,bid,hash,href FROM {delicious_bookmarks_backup} WHERE nid = :nid", array(':nid' => $node->nid))->fetchObject();
 
+    if ($cache == true) {
+      if (!$this->html = file_get_contents('public://delicious_backup/' . $this->obj->hash)) {
+        watchdog('delicious_backup', 'Error getting hash file %id - %url ', array('%id' => $this->obj->bid, '%url' => $this->obj->href));
+      }
+      
+      if ($node) {
+        $this->content = $this->node->body[$this->node->language][0]['value'];
+      }
+
+    }
+
+  }
+  
+  private function GetNode() {
+    if ($this->node == null)
+      $this->node = node_load($this->nid);
+    
+    return $this->node;
+  }
+
+  function GetExternalHTML() {
+
+    try {
+      $obj = $this->obj;
+      
+      if (is_numeric($obj)) $obj = db_query("SELECT nid,bid,hash,href FROM {delicious_bookmarks_backup} WHERE bid = :bid", array(':bid' => $obj))->fetchObject();
+
+      $file = 'public://delicious_backup/' . $obj->hash;
+
+      // validate file
+      if (!file_exists($file)) throw new Exception('no file content');
+      if (_delicious_backup_IsBinary($file)) throw new Exception('file is binary'); //@TODO: PDF download or other?
+      if (!$html = file_get_contents($file)) throw new Exception('error reading hash file');
+      if (strlen($html) == 0) throw new Exception('zero content');
+      if ($obj->nid == 0) throw new Exception('no node nid found');
+
+      $this->html = $html;
+      $this->log('got external html');
+      
+      $this->content = DeliciousBackup::Readability($this->html);
+      $this->content = mb_convert_encoding($this->content, 'HTML-ENTITIES', "UTF-8");
+
+      $this->node = node_load($obj->nid);
+
+      if ($this->getimages == true) {
+        $this->ImagesDownload();
+        $this->ReplaceImages();
+      }
+
+      $this->content = delicious_backup_filter($this->content, false, $this->node);
+
+      $this->node = node_load($obj->nid);
+      $this->node->body[$this->node->language][0]['value'] = $this->content;
+      $this->node->body[$this->node->language][0]['format'] = 'full_html';
+
+      node_save($this->node);
+
+      return true;
+
+    } catch (Exception $e) {
+      watchdog('delicious_backup', 'error on bid: ' . $obj->bid . ' ' . $e->getMessage());
+      return false;
+    }  
+
+  }  
+  
+  function ReplaceImages() {
+
+      if (!$field = field_get_items('node', $this->node, 'delicious_bookmark_image', $this->node->language)) {
+        return;
+      }
+
+      $imgs = array();
+      foreach($field as $img) {
+        $imgs[$img['filename']] = array(
+          'width' => '200',
+          'src' => file_create_url($img['uri']),
+         );
+
+        if ($img['alt']) $imgs[$img['filename']]['alt'] = $img['alt'];
+        if ($img['title']) $imgs[$img['filename']]['title'] = $img['title'];
+
+      };
+
+      $this->_ReplaceExternalImages($imgs);
+  }  
+  
+  function ImagesDownload() {
+
+    if (!count($imgs = $this->GetImagesInfo($this->content)) > 0) return false;
+
+
+    foreach($imgs as $img) {
+      $this->ImageAttach($img);
+    }
+
+    return true;
+  }  
+  
+  private function ImageAttach($img_ar) {
+    try {
+      $node = $this->GetNode();
+      
+      // check if image already attached to this node
+      if ($images = field_get_items('node', $node, 'delicious_bookmark_image', $node->language)) {
+
+        foreach($images as $img) {
+          if (basename($img_ar['absolute_url']) == $img['filename']) return true;
+        }
+
+      }
+
+      // download image and attach to node
+
+      $img_path = 'public://link_image/'. $node->nid .'/' . basename($img_ar['absolute_url']);
+      file_prepare_directory($dest_path = dirname($img_path), FILE_CREATE_DIRECTORY | FILE_MODIFY_PERMISSIONS);
+
+      if (!file_exists($img_path)) {
+        $res = drupal_http_request($img_ar['absolute_url']);
+        if ($res->code != 200) throw new Exception('error getting image: ' . $img_ar['absolute_url']);
+        file_put_contents($img_path, $res->data);    
+      }
+
+      // @TODO: more check here
+      if (filesize($img_path) == 0) throw new Exception('invalid image file: ' . $img_ar['absolute_url']);
+
+      // create a file object to attach
+      $file =  new stdClass();
+      #$files->uid = (isset($local_user->uid) && !empty($local_user->uid)?$local_user->uid:1);
+      $file->filename = basename($img_ar['absolute_url']);
+      $file->uri = $img_path;
+      $file->filemime = file_get_mimetype($img_path);
+      $file->status = 1;
+
+      // attributes
+      if (isset($img_ar['alt'])) $file->alt = $img_ar['alt'];
+      if (isset($img_ar['title'])) $file->title = $img_ar['title'];    
+
+      file_save($file);
+
+      $node->delicious_bookmark_image[$node->language][]['fid'] = $file->fid;    
+
+      // @TODO: reload node to get new field; some better funtion?
+      node_save($node);
+      $this->node = node_load($node->nid);
+      
+      $this->log('Image downloaded: ' . $img_ar['absolute_url']);
+
+    } catch (Exception $e) {
+      watchdog_exception('delicious_backup', $e);
+      return false;
+    }
+
+    return true;  
   }
 
   private function CreateDOM($html) {
@@ -36,7 +198,7 @@ class Reader {
     $this->html = $html;
   }
 
-  function GetImagesInfo ($content = '') {
+  function GetImagesInfo($content = '') {
 
     /*
      *     [2] => Array
@@ -116,6 +278,68 @@ class Reader {
   private function _is_img_url($url) {
     return preg_match('@\.(png|jpg|gif|jpeg)$@i', $url);
   }
+  
+  private function _ReplaceExternalImages($imgs) {
+    $doc = $this->CreateDOM($this->content);
+
+    $xpath = new DOMXPath($doc);
+
+    foreach($xpath->query( "//img") as $element) {
+      
+      $ele = null; $img_src = null;
+
+      if ($element->parentNode->nodeName == 'a') {
+        
+        // lightbox images
+        if ($this->_is_img_url($element->parentNode->getAttribute('href'))) {
+          $ele = $element->parentNode;
+          $img_src = $element->parentNode->getAttribute('href');
+        } else {
+          
+          // image link to external !?
+          $img_src = $element->getAttribute('src');
+          $ele = $element;
+        }
+        
+      } else {
+
+        // normal image tags
+        if ($this->_is_img_url($element->getAttribute('src'))) {
+          $ele = $element;
+          $img_src = $element->getAttribute('src');          
+        }
+        
+      }
+      
+      
+      // Replace external image src tags with internal if we get a internal url
+      if ($ele AND isset($imgs[basename($img_src)])) {
+          
+        // create new image element and add attributes
+        $new_img = $doc->createElement('img');
+        foreach($imgs[basename($img_src)] as $attr => $value) $new_img->setAttribute($attr, $value);
+
+        $ele->parentNode->replaceChild($new_img, $ele);
+        //$ele->parentNode->replaceChild($doc->createTextNode('test'), $ele);
+        //$ele->parentNode->replaceChild($doc->createTextNode($image_marker), $ele);
+      } else {
+        
+        // no image to replace found remove it
+        if ($ele) $ele->parentNode->removeChild($ele);
+      }
+        
+        
+      if (!$ele) {
+        //image not found or unknown format; remove it
+        $element->parentNode->removeChild($element);
+      }
+
+
+    }
+
+
+    $this->content = $this->myinnerHTML($doc);
+  }   
   
   function ReplaceExternalImages($content, $imgs) {
     $doc = $this->CreateDOM($content);
@@ -202,11 +426,40 @@ class Reader {
   
   private function myinnerHTML($doc){
     //http://svn.beerpla.net/repos/public/PHP/SmartDOMDocument/trunk/SmartDOMDocument.class.php
-    $content = preg_replace(array("/^\<\!DOCTYPE.*?<html><body>/si", "!</body></html>$!si"), "", $doc->saveHTML());
-		return $content;    
+		return preg_replace(array("/^\<\!DOCTYPE.*?<html><body>/si", "!</body></html>$!si"), '', $doc->saveHTML());    
   }  
+  
+  private function FileIsBinary($file) { 
+    if (file_exists($file)) { 
+      if (!is_file($file)) return 0; 
 
+      $fh  = fopen($file, "r"); 
+      $blk = fread($fh, 512); 
+      fclose($fh); 
+      clearstatcache(); 
+
+      return ( 
+        //0 or substr_count($blk, "^ -~", "^\r\n")/512 > 0.3 
+          substr_count($blk, "\x00") > 0 
+      ); 
+    } 
+    return 0; 
+  }   
+
+  private function log($str) {
+    $this->logArray[] = $str;
+  }  
+  
+  public function GetLog() {
+    return implode("\r\n", $this->logArray);
+  }
+  
+  public function GetContent() {
+    return $this->content;
+  }
+  
 }
+
 
 
 

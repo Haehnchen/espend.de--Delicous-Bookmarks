@@ -104,7 +104,7 @@ function _delicious_backup_replace_img_src($node, $content) {
       
     };
  
-    $test = new Reader();
+    $test = new Reader($node);
     return $test->ReplaceExternalImages($content, $imgs);
 }
 
@@ -389,7 +389,11 @@ function delicious_backup_filter($str, $refilter = false, $node = false) {
 
     $text = htmLawed($str, $config);
     
-    if ($node) $text = _delicious_backup_replace_img_src($node, $text);
+    if ($node) { 
+      $test = new Reader($node, true);
+      $test->ReplaceImages();
+      $test->GetContent();
+    }
 
     return _filter_autop($text);
 

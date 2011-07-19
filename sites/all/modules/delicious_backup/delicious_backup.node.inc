@@ -8,9 +8,13 @@ function delicious_backup_bookmark_upd($node) {
 
 
   //delicious_backup_get_content($bid);
+  $test = new Reader($node);
+  #$test->getimages = false;
+  $test->GetExternalHTML();
+  
 
-  delicious_backup_update_node($bid, true);
-  return 'updated';
+  #delicious_backup_update_node($bid, true);
+  return nl2br($test->GetLog());
 }
 
 function delicious_backup_bookmark_dsp($node) {
