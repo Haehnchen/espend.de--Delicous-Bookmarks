@@ -72,162 +72,21 @@ function _delicious_backup_full_worker() {
   }     
 }
 
-function delicious_backup_get_images(&$node, $html, $url) {
-    
-  $r = new Reader($url, $html);
-    
-  if (!count($imgs = $r->GetImagesInfo($html)) > 0) return false;
-  
-  foreach($imgs as $img) {
-    _delicious_backup_get_image($node, $img);
-  }
-  
-  return true;
-}
-
-function _delicious_backup_replace_img_src($node, $content) {
-  
-    if (!$field = field_get_items('node', $node, 'delicious_bookmark_image', $node->language)) {
-      $field = array();
-      //return $content;
-    }
-
-    $imgs = array();
-    foreach($field as $img) {
-      $imgs[$img['filename']] = array(
-        'width' => '200',
-        'src' => file_create_url($img['uri']),
-       );
-      
-      if ($img['alt']) $imgs[$img['filename']]['alt'] = $img['alt'];
-      if ($img['title']) $imgs[$img['filename']]['title'] = $img['title'];
-      
-    };
- 
-    $test = new Reader($node);
-    return $test->ReplaceExternalImages($content, $imgs);
-}
-
 function delicious_backup_update_node($obj, $getimages = false) {
-
-  $getimages = true;
   
   try {
-    
+
     if (is_numeric($obj)) $obj = db_query("SELECT nid,bid,hash,href FROM {delicious_bookmarks_backup} WHERE bid = :bid", array(':bid' => $obj))->fetchObject();
-
-    $file = 'public://delicious_backup/' . $obj->hash;
-
-    // validate file
-    if (!file_exists($file)) throw new Exception('no file content');
-    if (_delicious_backup_IsBinary($file)) throw new Exception('file is binary'); //@TODO: PDF download or other?
-    if (!$html = file_get_contents($file)) throw new Exception('error reading hash file');
-    if (strlen($html) == 0) throw new Exception('zero content');
-    if ($obj->nid == 0) throw new Exception('no node nid found');
-
-    $content = DeliciousBackup::Readability($html);
-    $content = mb_convert_encoding($content, 'HTML-ENTITIES', "UTF-8");
-
-    $node = node_load($obj->nid);
-
-    if ($getimages == true) {
-      $path = drupal_get_path('module', 'delicious_backup');    
-      //require_once $path.'/Files/Reader.class.php';    
-      delicious_backup_get_images($node, $content, $obj->href);
-
-      $content = _delicious_backup_replace_img_src($node, $content);
-
-    }
-
-    $content = delicious_backup_filter($content, false, $node);
-
-    $node = node_load($obj->nid);
-    $node->body[$node->language][0]['value'] = $content;
-    $node->body[$node->language][0]['format'] = 'full_html';
-
-    node_save($node);
-  
-    return true;
+    
+    $test = new Reader($obj->nid);
+    $test->UpdateNode();
+    
   
   } catch (Exception $e) {
     watchdog('delicious_backup', 'error on bid: ' . $obj->bid . ' ' . $e->getMessage());
     return false;
   }  
   
-}
-
-function _delicious_backup_IsBinary($file) { 
-  if (file_exists($file)) { 
-    if (!is_file($file)) return 0; 
-
-    $fh  = fopen($file, "r"); 
-    $blk = fread($fh, 512); 
-    fclose($fh); 
-    clearstatcache(); 
-
-    return ( 
-      //0 or substr_count($blk, "^ -~", "^\r\n")/512 > 0.3 
-        substr_count($blk, "\x00") > 0 
-    ); 
-  } 
-  return 0; 
-} 
-
-
-
-function _delicious_backup_get_image(&$node, $img_ar) {
-
-  try {
-    // check if image already attached to this node
-    if ($images = field_get_items('node', $node, 'delicious_bookmark_image', $node->language)) {
-      
-      foreach($images as $img) {
-        if (basename($img_ar['absolute_url']) == $img['filename']) return true;
-      }
-      
-    }
-    
-    // download image and attach to node
-    
-    $img_path = 'public://link_image/'. $node->nid .'/' . basename($img_ar['absolute_url']);
-    file_prepare_directory($dest_path = dirname($img_path), FILE_CREATE_DIRECTORY | FILE_MODIFY_PERMISSIONS);
-    
-    if (!file_exists($img_path)) {
-      $res = drupal_http_request($img_ar['absolute_url']);
-      if ($res->code != 200) throw new Exception('error getting image: ' . $img_ar['absolute_url']);
-      file_put_contents($img_path, $res->data);    
-    }
-    
-    // @TODO: more check here
-    if (filesize($img_path) == 0) throw new Exception('invalid image file: ' . $img_ar['absolute_url']);
-    
-    // create a file object to attach
-    $file =  new stdClass();
-    #$files->uid = (isset($local_user->uid) && !empty($local_user->uid)?$local_user->uid:1);
-    $file->filename = basename($img_ar['absolute_url']);
-    $file->uri = $img_path;
-    $file->filemime = file_get_mimetype($img_path);
-    $file->status = 1;
-    
-    // attributes
-    if (isset($img_ar['alt'])) $file->alt = $img_ar['alt'];
-    if (isset($img_ar['title'])) $file->title = $img_ar['title'];    
-    
-    file_save($file);
-    
-    $node->delicious_bookmark_image[$node->language][]['fid'] = $file->fid;    
-
-    // @TODO: reload node to get new field; some better funtion?
-    node_save($node);
-    
-    $node = node_load($node->nid);
-
-  } catch (Exception $e) {
-    watchdog_exception('delicious_backup', $e);
-    return false;
-  }
-  
-  return true;
 }
 
 function delicious_backup_import_bookmarks() {
@@ -381,51 +240,4 @@ function delicious_backup_get_content($link) {
 
 }
 
-function delicious_backup_filter($str, $refilter = false, $node = false) {
-  
-    require_once drupal_get_path('module', 'delicious_backup') . '/Files/htmLawed.php';
-
-    $config = array('safe'=>1, 'elements'=>'div, br, img, h1, h2, h3, h4 ,h5, a, em, b, strong, cite, code, ol, ul, li, dl, dt, dd, p, div, span, code, blockquote, pre', 'deny_attribute'=>'id, style, class');
-
-    $text = htmLawed($str, $config);
-    
-    if ($node) { 
-      $test = new Reader($node, true);
-      $test->ReplaceImages();
-      $test->GetContent();
-    }
-
-    return _filter_autop($text);
-
-    if (!file_exists('public://HTMLPurifierCache')) drupal_mkdir('public://HTMLPurifierCache');
-
-    require_once drupal_get_path('module', 'delicious_backup') . '/library/HTMLPurifier.auto.php';
-
-    #$config = HTMLPurifier_Config::createDefault();
-    #$purifier = new HTMLPurifier();
-    #$config =HTMLPurifier_Config::createDefault()->getHTMLDefinition(true)->addElement('article', "header", "footer", "aside", array());
-
-    $config = HTMLPurifier_Config::createDefault();
-
-    #$config->getHTMLDefinition(true)->addElement('article', "header", "footer", "aside", array());
-    #$config->set('HTML.Allowed', 'div[id]');
-    #$config->set('AutoFormat.AutoParagraph', true);
-    $config->set('AutoFormat.RemoveEmpty', true);
-    #$config->set('AutoFormat.RemoveEmpty.RemoveNbsp', true);
-
-    if ($refilter == false) {
-      $config->set('Attr.EnableID', true);
-      #$config->set('HTML.EnableAttrID', true);
-      #$config->set('Attr.IDPrefix', 'dsb_');
-      $config->set('HTML.Allowed', 'div[id],ul[id],li[class],ul[class],p,pre,h2,h3,h4,5,br,code,blockquote,article,img[src],img[width],img[alt],img[title],strong,a[href]');
-    } else {
-      $config->set('Attr.EnableID', false);      
-      $config->set('HTML.Allowed', 'div,ul,li,p,pre,h2,h3,h4,h5,br,code,blockquote,b,u,i,ol,strong,a[href],img[src],img[width],img[alt],img[title]');
-    }
-
-    $config->set('Cache.SerializerPath', 'public://HTMLPurifierCache');
-
-    $purifier = new HTMLPurifier($config);
-    return $purifier->purify($str);
-}
 ?>

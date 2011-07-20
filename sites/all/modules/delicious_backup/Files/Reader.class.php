@@ -15,8 +15,9 @@ class Reader {
 
   function __construct($node, $cache = false) {
     
-    $this->node = $node;
-    $this->obj = db_query("SELECT nid,bid,hash,href FROM {delicious_bookmarks_backup} WHERE nid = :nid", array(':nid' => $node->nid))->fetchObject();
+    $this->node = (is_numeric($node)) ? node_load($node) : $node;
+    
+    $this->obj = db_query("SELECT nid,bid,hash,href FROM {delicious_bookmarks_backup} WHERE nid = :nid", array(':nid' => $this->node->nid))->fetchObject();
 
     if ($cache == true) {
       if (!$this->html = file_get_contents('public://delicious_backup/' . $this->obj->hash)) {
@@ -38,7 +39,7 @@ class Reader {
     return $this->node;
   }
 
-  function GetExternalHTML() {
+  function UpdateNode() {
 
     try {
       $obj = $this->obj;
@@ -49,7 +50,7 @@ class Reader {
 
       // validate file
       if (!file_exists($file)) throw new Exception('no file content');
-      if (_delicious_backup_IsBinary($file)) throw new Exception('file is binary'); //@TODO: PDF download or other?
+      if ($this->FileIsBinary($file)) throw new Exception('file is binary'); //@TODO: PDF download or other?
       if (!$html = file_get_contents($file)) throw new Exception('error reading hash file');
       if (strlen($html) == 0) throw new Exception('zero content');
       if ($obj->nid == 0) throw new Exception('no node nid found');
@@ -67,7 +68,8 @@ class Reader {
         $this->ReplaceImages();
       }
 
-      $this->content = delicious_backup_filter($this->content, false, $this->node);
+      #$this->content = delicious_backup_filter($this->content, false, $this->node);
+      $this->FilterContent();
 
       $this->node = node_load($obj->nid);
       $this->node->body[$this->node->language][0]['value'] = $this->content;
@@ -445,6 +447,19 @@ class Reader {
     } 
     return 0; 
   }   
+  
+  private function FilterContent() {
+  
+    require_once drupal_get_path('module', 'delicious_backup') . '/Files/htmLawed.php';
+
+    $config = array('safe'=>1, 'elements'=>'div, br, img, h1, h2, h3, h4 ,h5, a, em, b, strong, cite, code, ol, ul, li, dl, dt, dd, p, div, span, code, blockquote, pre', 'deny_attribute'=>'id, style, class');
+
+    $this->content = htmLawed($this->content, $config);
+    
+    // replace external images with internal
+    if ($this->node) 
+      $this->ReplaceImages();
+  }
 
   private function log($str) {
     $this->logArray[] = $str;

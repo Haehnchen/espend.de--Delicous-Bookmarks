@@ -10,7 +10,7 @@ function delicious_backup_bookmark_upd($node) {
   //delicious_backup_get_content($bid);
   $test = new Reader($node);
   #$test->getimages = false;
-  $test->GetExternalHTML();
+  $test->UpdateNode();
   
 
   #delicious_backup_update_node($bid, true);
