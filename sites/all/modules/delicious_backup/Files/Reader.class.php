@@ -126,12 +126,8 @@ class Reader {
       $node = $this->GetNode();
       
       // check if image already attached to this node
-      if ($images = field_get_items('node', $node, 'delicious_bookmark_image', $node->language)) {
-        foreach($images as $img) {
-          if (basename($img_ar['absolute_url']) == $img['filename']) return true;
-        }
-
-      }
+      if (DeliciousBackup::ImageIsAttached('delicious_bookmark_image', $node, $img_ar['absolute_url']))
+        return true;
 
       // download image and attach to node
 
@@ -144,36 +140,20 @@ class Reader {
         file_put_contents($img_path, $res->data);    
       }
       
-      $info = image_get_info($file->filepath);
-      if (!$info || empty($info['extension'])) {
+      if (!DeliciousBackup::FileIsImage($img_path)) {
         unlink($img_path);
         throw new Exception('error getting image: ' . t('Only JPEG, PNG and GIF images are allowed.') . ' : '. $img_ar['absolute_url']);
       }      
-      
-
-      // @TODO: more check here
-      if (filesize($img_path) == 0) throw new Exception('invalid image file: ' . $img_ar['absolute_url']);
 
       // create a file object to attach
-      $file =  new stdClass();
-      #$files->uid = (isset($local_user->uid) && !empty($local_user->uid)?$local_user->uid:1);
-      $file->filename = basename($img_ar['absolute_url']);
-      $file->uri = $img_path;
-      $file->filemime = file_get_mimetype($img_path);
-      $file->status = 1;
+      $file = DeliciousBackup::UriToFile($img_path);
 
       // attributes
       if (isset($img_ar['alt'])) $file->alt = $img_ar['alt'];
       if (isset($img_ar['title'])) $file->title = $img_ar['title'];    
 
-      file_save($file);
+      DeliciousBackup::AttachFileToNode($node, 'delicious_bookmark_image', $file);
 
-      $node->delicious_bookmark_image[$node->language][]['fid'] = $file->fid;    
-
-      // @TODO: reload node to get new field; some better funtion?
-      node_save($node);
-      $this->node = node_load($node->nid);
-      
       $this->log('Image downloaded: ' . $img_ar['absolute_url']);
 
     } catch (Exception $e) {

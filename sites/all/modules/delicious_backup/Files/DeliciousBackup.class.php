@@ -144,9 +144,13 @@ class DeliciousBackup {
     return !$info || empty($info['extension']) ? false : true;
   }
     
-  static function AttachFileToNode($node, $field, $file) {
+  static function AttachFileToNode(&$node, $field, $file, $reloadNode = true) {
     $node->{$field}[$node->language][]['fid'] = $file->fid;
     node_save($node);
+    
+    if ($reloadNode == true)
+      $node = node_load($node->nid);
+    
   }
   
 }
