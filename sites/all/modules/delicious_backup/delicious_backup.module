@@ -7,6 +7,7 @@ require_once drupal_get_path('module', 'delicious_backup') . '/Files/url_to_abso
 
 // hooks
 require_once drupal_get_path('module', 'delicious_backup') . '/delicious_backup.hooks.inc';
+require_once drupal_get_path('module', 'delicious_backup') . '/delicious_backup.drush.inc';
 
 function delicious_backup_bookmark_access($node) {
   return $node->type == 'delicious_bookmark' && user_access('view content');

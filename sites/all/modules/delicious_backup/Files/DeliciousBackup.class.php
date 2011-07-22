@@ -107,5 +107,47 @@ class DeliciousBackup {
     
   }
   
+  static function ImageIsAttached($field, $node, $uri) {
+    
+    // no file attached
+    if (!$images = field_get_items('node', $node, $field, $node->language))
+      return false;
+   
+    foreach($images as $img) {
+     if (basename($uri) == $img['filename']) return true;
+    }
+    
+    return false;
+  }
+  
+  static function UriToFile($uri) {
+    
+    // remove any previous link.  This is mostly for testing - shouldn't happen in prod.
+    if($exists = db_select('file_managed')->fields('file_managed', array('fid'))->condition('uri', $uri)->execute()->fetchField())
+      return file_load($exists);
+    
+    // create a file object to attach
+    $file =  new stdClass();
+    $file->filename = basename($uri);
+    $file->uri = $uri;
+    $file->filemime = file_get_mimetype($uri);
+    $file->status = 1;    
+
+    file_save($file);
+        
+    return $file;
+  }
+  
+  static function FileIsImage($uri) {
+    $info = image_get_info($uri);
+  
+    return !$info || empty($info['extension']) ? false : true;
+  }
+    
+  static function AttachFileToNode($node, $field, $file) {
+    $node->{$field}[$node->language][]['fid'] = $file->fid;
+    node_save($node);
+  }
+  
 }
 ?>

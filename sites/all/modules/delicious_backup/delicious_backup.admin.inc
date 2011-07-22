@@ -192,6 +192,7 @@ function delicious_backup_batch_process($callback, &$context) {
     ->execute();
 
   foreach ($result as $row) {
+    file_put_contents('public://logger.txt', $row->bid . "\r\n", FILE_APPEND);
     $context['sandbox']['current_node'] = $row->bid;
     $context['sandbox']['progress']++;
     //$context['message'] = $row->nid; //$context['sandbox']['progress'] . '/' . $context['sandbox']['max'];

@@ -316,6 +316,7 @@ function split_url( $url, $decode=TRUE )
 
 
 	// Split the URL into components.
+  $parts = array();
 	if ( !preg_match( '!' . $xurl . '!', $url, $m ) )
 		return FALSE;
 

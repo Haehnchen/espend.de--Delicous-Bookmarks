@@ -18,7 +18,8 @@ class Reader {
     $this->node = (is_numeric($node)) ? node_load($node) : $node;
     
     $this->obj = db_query("SELECT nid,bid,hash,href FROM {delicious_bookmarks_backup} WHERE nid = :nid", array(':nid' => $this->node->nid))->fetchObject();
-
+    $this->url = $this->obj->href;
+    
     if ($cache == true) {
       if (!$this->html = file_get_contents('public://delicious_backup/' . $this->obj->hash)) {
         watchdog('delicious_backup', 'Error getting hash file %id - %url ', array('%id' => $this->obj->bid, '%url' => $this->obj->href));
@@ -56,8 +57,9 @@ class Reader {
       if ($obj->nid == 0) throw new Exception('no node nid found');
 
       $this->html = $html;
-      $this->log('got external html');
-      
+
+      $this->log('got content html');
+
       $this->content = DeliciousBackup::Readability($this->html);
       $this->content = mb_convert_encoding($this->content, 'HTML-ENTITIES', "UTF-8");
 
@@ -69,7 +71,7 @@ class Reader {
       }
 
       #$this->content = delicious_backup_filter($this->content, false, $this->node);
-      $this->FilterContent();
+      #$this->FilterContent();
 
       $this->node = node_load($obj->nid);
       $this->node->body[$this->node->language][0]['value'] = $this->content;
@@ -125,7 +127,6 @@ class Reader {
       
       // check if image already attached to this node
       if ($images = field_get_items('node', $node, 'delicious_bookmark_image', $node->language)) {
-
         foreach($images as $img) {
           if (basename($img_ar['absolute_url']) == $img['filename']) return true;
         }
@@ -142,6 +143,13 @@ class Reader {
         if ($res->code != 200) throw new Exception('error getting image: ' . $img_ar['absolute_url']);
         file_put_contents($img_path, $res->data);    
       }
+      
+      $info = image_get_info($file->filepath);
+      if (!$info || empty($info['extension'])) {
+        unlink($img_path);
+        throw new Exception('error getting image: ' . t('Only JPEG, PNG and GIF images are allowed.') . ' : '. $img_ar['absolute_url']);
+      }      
+      
 
       // @TODO: more check here
       if (filesize($img_path) == 0) throw new Exception('invalid image file: ' . $img_ar['absolute_url']);
@@ -200,7 +208,7 @@ class Reader {
     $this->html = $html;
   }
 
-  function GetImagesInfo($content = '') {
+  function GetImagesInfo() {
 
     /*
      *     [2] => Array
@@ -210,13 +218,13 @@ class Reader {
         )
      *
      */
-    $doc = $this->CreateDOM($content);
+    $doc = $this->CreateDOM($this->content);
 
     $xpath = new DOMXPath($doc);
 
     $imgs = array();
 
-    $baseurl = $this->GetPaseUrl($this->url);
+    $baseurl = $this->GetBaseUrl();
 
     foreach($xpath->query( "//img") as $element) {
       // add image data to array
@@ -255,7 +263,7 @@ class Reader {
 
     $imgs = array();
 
-    $baseurl = $this->GetPaseUrl($this->url);
+    $baseurl = $this->GetBaseUrl();
 
     $img_count = 0;
 
@@ -405,7 +413,7 @@ class Reader {
     return $this->myinnerHTML($doc);
   }  
   
-  function GetPaseUrl($fallbackurl = '') {
+  function GetBaseUrl() {
 
     $doc = $this->CreateDOM($this->html);    
 
@@ -421,9 +429,7 @@ class Reader {
 
 
     // return fallback (mostly complete url for save if in main app)
-    if ($fallbackurl != '') return $fallbackurl;
-
-    return false;
+    return $this->url;
   }
   
   private function myinnerHTML($doc){
@@ -454,7 +460,10 @@ class Reader {
 
     $config = array('safe'=>1, 'elements'=>'div, br, img, h1, h2, h3, h4 ,h5, a, em, b, strong, cite, code, ol, ul, li, dl, dt, dd, p, div, span, code, blockquote, pre', 'deny_attribute'=>'id, style, class');
 
-    $this->content = htmLawed($this->content, $config);
+    
+    $this->content = preg_replace('/<!--(.*)-->/Uis', '', $this->content);
+    #$this->content = preg_replace('/<p>&nbsp;<\/p>/Uis', '', $this->content);
+    $this->content = _filter_autop(htmLawed($this->content, $config));
     
     // replace external images with internal
     if ($this->node) 
