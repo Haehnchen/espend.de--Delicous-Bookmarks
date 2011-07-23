@@ -139,6 +139,9 @@ class DeliciousBackup {
   }
   
   static function FileIsImage($uri) {
+    if (!file_exists($uri))
+      return false;
+    
     $info = image_get_info($uri);
   
     return !$info || empty($info['extension']) ? false : true;

@@ -208,37 +208,18 @@ function delicious_backup_get_content($link) {
 
   if (is_numeric($link)) $link = db_query("SELECT bid, hash, href FROM {delicious_bookmarks_backup} WHERE bid = :bid", array(':bid' => $link))->fetchObject();
   
-  $opts = array(
-    'timeout' => 10,
-  );
+  $test = new Reader($link->nid);
+  $test->UpdateNode();
 
-  $result = drupal_http_request($link->href, $opts);
+}
 
-  if ($result->code == 200) {
-    //db_update('delicious_bookmarks_backup')->fields(array('content_fetched' => time(), 'html_content' => gzencode ($result->data)))->condition('bid',$bid)->execute();
-    db_update('delicious_bookmarks_backup')->fields(array('response_code' => $result->code, 'content_fetched' => time(), 'content_updated' => time(), 'queued' => 0))->condition('bid', $link->bid)->execute();
-    if (!file_exists('public://delicious_backup')) drupal_mkdir('public://delicious_backup');
-
-    file_put_contents('public://delicious_backup/' . $link->hash, $result->data);
-    
-    module_invoke_all('delicious_backup_updated', $link->bid);
-
-    watchdog('delicious_backup', 'OK getting html content %id - %url ', array('%id' => $link->bid, '%url' => $link->href));
-
-  } else {
-    watchdog('delicious_backup', 'Error getting html content %id - %url ', array('%id' => $link->bid, '%url' => $link->href), WATCHDOG_ALERT);
-    
-    db_update('delicious_bookmarks_backup')
-    ->fields(array(
-      'content_fetched' => time(),
-      'response_code' => $result->code,
-      'queued' => 0,
-    ))
-    ->expression('response_errors', 'response_errors + 1')
-    ->condition('bid', $link->bid)->execute();
-    
-  }
-
+function delicious_backup_get_valid_bookmarks() {
+  return db_select('delicious_bookmarks_backup')
+    ->fields('delicious_bookmarks_backup', array('bid', 'hash', 'href', 'nid'))
+    ->condition('response_code', 200)
+    #->condition('bid', 1340)
+    ->orderBy('bid')
+    ->execute();
 }
 
 ?>
