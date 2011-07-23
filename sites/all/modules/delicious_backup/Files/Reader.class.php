@@ -18,8 +18,13 @@ class Reader {
   function __construct($node, $cache = false) {
 
     $this->node = (is_numeric($node)) ? node_load($node) : $node;
+    if(!$this->node)
+      throw new Exception('node unknown');
 
     $this->obj = db_query("SELECT nid,bid,hash,href FROM {delicious_bookmarks_backup} WHERE nid = :nid", array(':nid' => $this->node->nid))->fetchObject();
+    if(!$this->obj)
+      throw new Exception('database error');            
+    
     $this->url = $this->obj->href;
 
     if ($cache == true) {
@@ -76,7 +81,8 @@ class Reader {
 
       if ($this->getimages == true) {
         $this->ImagesDownload();
-        $this->ReplaceImages();
+        
+        #$this->ReplaceImages();
       }
 
       #$this->content = delicious_backup_filter($this->content, false, $this->node);
@@ -115,7 +121,7 @@ class Reader {
         if ($img['title']) $imgs[$img['filename']]['title'] = $img['title'];
 
       };
-
+      
       $this->_ReplaceExternalImages($imgs);
   }
 
@@ -139,36 +145,61 @@ class Reader {
     return $res;
   }
 
+  private function TransliterateFilename($filename) {
+
+    $filename = urldecode($filename);    
+    
+    /*if (function_exists('transliteration_clean_filename')) {
+      return transliteration_clean_filename($filename);
+    }*/
+    
+    $filename = urldecode($filename);
+    $filename = str_replace(' ', '_', $filename);
+    // Remove remaining unsafe characters.
+    $filename = preg_replace('![^0-9A-Za-z_.-]!', '', $filename);
+    // Force lowercase to prevent issues on case-insensitive file systems.
+    $filename = strtolower($filename);
+    
+    return $filename;
+  }
+  
   function ImagesDownload() {
 
     if (!count($imgs = $this->GetImagesInfo($this->content)) > 0)
       return false;
 
+
+    
     foreach($imgs as $img) {
       try {
+        
+        $img_path = 'public://link_image/'. $this->obj->hash .'/' . $this->TransliterateFilename(basename($img['absolute_url']));
+
         // check if image already attached to this node
-        if (DeliciousBackup::ImageIsAttached(self::FIELD_ATTACH_IMAGE, $this->node, $img['absolute_url']))
-          continue;;
+        if (!DeliciousBackup::ImageIsAttached(self::FIELD_ATTACH_IMAGE, $this->node, $img_path)) {
+          
+          // download image and attach to node
+          $this->HTTPDownload($img['absolute_url'], $img_path);
 
-        // download image and attach to node
-        $img_path = 'public://link_image/'. $this->node->nid .'/' . basename($img['absolute_url']);
-        $this->HTTPDownload($img['absolute_url'], $img_path);
+          if (!DeliciousBackup::FileIsImage($img_path)) {
+            unlink($img_path);
+            throw new Exception('error getting image: ' . t('Only JPEG, PNG and GIF images are allowed.') . ' : '. $img['absolute_url']);
+          }
 
-        if (!DeliciousBackup::FileIsImage($img_path)) {
-          unlink($img_path);
-          throw new Exception('error getting image: ' . t('Only JPEG, PNG and GIF images are allowed.') . ' : '. $img['absolute_url']);
+          // create a file object to attach
+          $file = DeliciousBackup::UriToFile($img_path);
+
+          // attributes
+          if (isset($img['alt'])) $file->alt = $img['alt'];
+          if (isset($img['title'])) $file->title = $img['title'];
+
+          #print_r($file);
+          $images = field_get_items('node', $this->node, self::FIELD_ATTACH_IMAGE, $this->node->language);
+          DeliciousBackup::AttachFileToNode($this->node, self::FIELD_ATTACH_IMAGE, $file, true);
+
+          $this->log('Image downloaded: ' . $img['absolute_url']);
+          
         }
-
-        // create a file object to attach
-        $file = DeliciousBackup::UriToFile($img_path);
-
-        // attributes
-        if (isset($img['alt'])) $file->alt = $img['alt'];
-        if (isset($img['title'])) $file->title = $img['title'];
-
-        DeliciousBackup::AttachFileToNode($this->node, self::FIELD_ATTACH_IMAGE, $file, true);
-
-        $this->log('Image downloaded: ' . $img['absolute_url']);
 
       } catch (Exception $e) {
         $this->log('ImageAttach: ' . $e->getMessage());
@@ -240,6 +271,8 @@ class Reader {
         // use title tag of link is set
         if (!isset($img_t['title']) AND $parent->getAttribute('title')) $img_t['title'] = $parent->getAttribute('title');
       }
+      
+      $img_t['transliterate_filename']  = $this->TransliterateFilename($img_t['absolute_url']);
 
       $imgs[] = $img_t;
 
@@ -315,13 +348,15 @@ class Reader {
 
       }
 
-
+      
+      $filename = $this->TransliterateFilename(basename($img_src));
+      
       // Replace external image src tags with internal if we get a internal url
-      if ($ele AND isset($imgs[basename($img_src)])) {
+      if ($ele AND isset($imgs[$filename])) {
 
         // create new image element and add attributes
         $new_img = $doc->createElement('img');
-        foreach($imgs[basename($img_src)] as $attr => $value) $new_img->setAttribute($attr, $value);
+        foreach($imgs[$filename] as $attr => $value) $new_img->setAttribute($attr, $value);
 
         $ele->parentNode->replaceChild($new_img, $ele);
         //$ele->parentNode->replaceChild($doc->createTextNode('test'), $ele);
@@ -481,14 +516,26 @@ class Reader {
 
     $filename = 'public://delicious_backup/' . $this->obj->hash;
     try {
-      
+
+      // simple check to not download binary links here depens on url
+      if (preg_match('/\.(pdf|mp4|png|gif|jpeg|jpg|mp3|flv|doc|docx)$/i', $this->obj->href))
+        throw new Exception('binary file?');
+
+      // get only headers of file; get_headers do redirect and provide an array so filter it tricky
+      $head = @get_headers($this->obj->href, 1);
+      if (isset($head['Content-Type']) AND !preg_match('@(text|html)@i', is_array($head['Content-Type']) ? end($head['Content-Type']) : $head['Content-Type']))
+        throw new Exception('url response: is not html');
+
+      if (isset($head['Content-Length']) AND (is_array($head['Content-Length']) ? end($head['Content-Length']) : $head['Content-Length'])  > 1024 * 1014 * 5)
+        throw new Exception('url response: file to large');
+
+
       $this->HTTPDownload($this->obj->href, $filename);
 
       #module_invoke_all('delicious_backup_updated', $link->bid);
-      
+
       db_update('delicious_bookmarks_backup')->fields(array('response_code' => 200, 'content_fetched' => time(), 'content_updated' => time(), 'queued' => 0))->condition('bid', $this->obj->bid)->execute();
       watchdog('delicious_backup', 'OK getting html content %id - %url ', array('%id' => $this->obj->bid, '%url' => $this->obj->href));
-      
     } catch (Exception $e) {
       db_update('delicious_bookmarks_backup')
               ->fields(array(
@@ -498,8 +545,8 @@ class Reader {
               ))
               ->expression('response_errors', 'response_errors + 1')
               ->condition('bid', $this->obj->bid)->execute();
-      
-      watchdog('delicious_backup', 'Error getting html content %id - %url ', array('%id' => $this->obj->bid, '%url' => $this->obj->href), WATCHDOG_ALERT);
+
+      watchdog('delicious_backup', 'Error getting html content: %msg - %id - %url ', array('%msg' => $e->getMessage(), '%id' => $this->obj->bid, '%url' => $this->obj->href), WATCHDOG_ALERT);
     }
   }
 

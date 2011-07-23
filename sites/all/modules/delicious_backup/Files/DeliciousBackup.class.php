@@ -116,16 +116,16 @@ class DeliciousBackup {
     foreach($images as $img) {
      if (basename($uri) == $img['filename']) return true;
     }
-    
+
     return false;
   }
   
   static function UriToFile($uri) {
-    
+
     // remove any previous link.  This is mostly for testing - shouldn't happen in prod.
     if($exists = db_select('file_managed')->fields('file_managed', array('fid'))->condition('uri', $uri)->execute()->fetchField())
       return file_load($exists);
-    
+
     // create a file object to attach
     $file =  new stdClass();
     $file->filename = basename($uri);
@@ -134,7 +134,7 @@ class DeliciousBackup {
     $file->status = 1;    
 
     file_save($file);
-        
+       
     return $file;
   }
   
@@ -150,11 +150,25 @@ class DeliciousBackup {
   static function AttachFileToNode(&$node, $field, $file, $reloadNode = true) {
     $node->{$field}[$node->language][]['fid'] = $file->fid;
     node_save($node);
-    
+
     if ($reloadNode == true)
       $node = node_load($node->nid);
     
   }
+  
+  static function GetDeliciousWeight($hash) {
+    $opts = array('timeout' => 10);
+    $url = 'http://feeds.delicious.com/v2/json/urlinfo/' . $hash;
+    
+    $res = drupal_http_request($url, $opts);
+    
+    if ($res->code == 200) {
+      $ar = drupal_json_decode($res->data);
+      if (isset($ar[0])) return current($ar);
+    }
+    
+    return array();
+  }  
   
 }
 ?>
