@@ -85,13 +85,9 @@ class Reader {
 
       $this->content = DeliciousBackup::Readability($this->html);
 
-      if ($this->getimages == true) {
-        $this->ImagesDownload();
-        
-        #$this->ReplaceImages();
-      }
+      // download image but only when set in var
+      $this->ImagesDownload();
 
-      #$this->content = delicious_backup_filter($this->content, false, $this->node);
       $this->FilterContent();
 
       $this->node = node_load($obj->nid);
@@ -128,7 +124,7 @@ class Reader {
 
       };
       
-      $this->_ReplaceExternalImages($imgs);
+      $this->ReplaceExternalImages($imgs);
   }
 
   private function HTTPDownload($url, $outputfile, $overwrite = false) {
@@ -180,11 +176,9 @@ class Reader {
   
   function ImagesDownload() {
 
-    if (!count($imgs = $this->GetImagesInfo($this->content)) > 0)
-      return false;
+    // nothing todo here
+    if ($this->getimages == false OR !count($imgs = $this->GetImagesInfo($this->content)) > 0) return;
 
-
-    
     foreach($imgs as $img) {
       try {
         
@@ -282,164 +276,52 @@ class Reader {
 
   }
 
-  function GetImagesReplacedMarker($content = '') {
-
-    $doc = $this->CreateDOM($content);
-
-    $xpath = new DOMXPath($doc);
-
-    $imgs = array();
-
-    $baseurl = $this->GetBaseUrl();
-
-    $img_count = 0;
-
-    foreach($xpath->query( "//img") as $element) {
-
-      $image_marker = "[IMAGE-" . $img_count++ . "]";
-
-      // check if image is a thumbnail; mostly it is clickable (lightbox)
-      if ($element->parentNode->nodeName == 'a' AND preg_match('@\.(png|jpg|gif|jpeg)$@i', $element->parentNode->getAttribute( 'href')) AND url_to_absolute($baseurl, $element->parentNode->getAttribute( 'href' )) != $element->getAttribute( 'src' )) {
-        // lightbox elements
-        $element->parentNode->parentNode->replaceChild($doc->createTextNode($image_marker), $element->parentNode);
-      } else {
-        $element->parentNode->replaceChild($doc->createTextNode($image_marker), $element);
-      }
-
-
-    }
-
-    return $this->myinnerHTML($doc);
-  }
-
   private function _is_img_url($url) {
     return preg_match('@\.(png|jpg|gif|jpeg)$@i', $url);
   }
 
-  private function _ReplaceExternalImages($imgs) {
+  private function ReplaceExternalImages($imgs) {
+
     $doc = $this->CreateDOM($this->content);
 
     $xpath = new DOMXPath($doc);
 
-    foreach($xpath->query( "//img") as $element) {
+    foreach ($xpath->query("//img") as $element) {
 
-      $ele = null; $img_src = null;
+      $ele = $element;
+      $img_src = $element->getAttribute('src');
 
-      if ($element->parentNode->nodeName == 'a') {
-
-        // lightbox images
-        if ($this->_is_img_url($element->parentNode->getAttribute('href'))) {
-          $ele = $element->parentNode;
-          $img_src = $element->parentNode->getAttribute('href');
-        } else {
-
-          // image link to external !?
-          $img_src = $element->getAttribute('src');
-          $ele = $element;
-        }
-
-      } else {
-
-        // normal image tags
-        if ($this->_is_img_url($element->getAttribute('src'))) {
-          $ele = $element;
-          $img_src = $element->getAttribute('src');
-        }
-
+      if ($element->parentNode->nodeName == 'a' AND $this->_is_img_url($url = url_to_absolute($this->url, $element->parentNode->getAttribute('href')))) {
+        // @TODO: $url can contant javascript: http://www.rainer-grundel.de/wissensdb/typo3/module/artikel/article/rssxml_newsfeeds_erstellen.html
+        // 
+        // lightbox pictures
+        $ele = $element->parentNode;
+        $img_src = $element->parentNode->getAttribute('href');
       }
 
-      
+
       $filename = $this->TransliterateFilename(basename($img_src));
-      
+
       // Replace external image src tags with internal if we get a internal url
       if ($ele AND isset($imgs[$filename])) {
 
         // create new image element and add attributes
         $new_img = $doc->createElement('img');
-        foreach($imgs[$filename] as $attr => $value) $new_img->setAttribute($attr, $value);
+        foreach ($imgs[$filename] as $attr => $value)
+          $new_img->setAttribute($attr, $value);
 
         $ele->parentNode->replaceChild($new_img, $ele);
-        //$ele->parentNode->replaceChild($doc->createTextNode('test'), $ele);
-        //$ele->parentNode->replaceChild($doc->createTextNode($image_marker), $ele);
+
       } else {
 
-        // no image to replace found remove it
-        if ($ele) $ele->parentNode->removeChild($ele);
+        // no image to replace found; remove it
+        $ele->parentNode->removeChild($ele);
       }
-
-
-      if (!$ele) {
-        //image not found or unknown format; remove it
-        $element->parentNode->removeChild($element);
-      }
-
 
     }
 
 
     $this->content = $this->myinnerHTML($doc);
-  }
-
-  function ReplaceExternalImages($content, $imgs) {
-    $doc = $this->CreateDOM($content);
-
-    $xpath = new DOMXPath($doc);
-
-    foreach($xpath->query( "//img") as $element) {
-
-      $ele = null; $img_src = null;
-
-      if ($element->parentNode->nodeName == 'a') {
-
-        // lightbox images
-        if ($this->_is_img_url($element->parentNode->getAttribute('href'))) {
-          $ele = $element->parentNode;
-          $img_src = $element->parentNode->getAttribute('href');
-        } else {
-
-          // image link to external !?
-          $img_src = $element->getAttribute('src');
-          $ele = $element;
-        }
-
-      } else {
-
-        // normal image tags
-        if ($this->_is_img_url($element->getAttribute('src'))) {
-          $ele = $element;
-          $img_src = $element->getAttribute('src');
-        }
-
-      }
-
-
-      // Replace external image src tags with internal if we get a internal url
-      if ($ele AND isset($imgs[basename($img_src)])) {
-
-        // create new image element and add attributes
-        $new_img = $doc->createElement('img');
-        foreach($imgs[basename($img_src)] as $attr => $value) $new_img->setAttribute($attr, $value);
-
-        $ele->parentNode->replaceChild($new_img, $ele);
-        //$ele->parentNode->replaceChild($doc->createTextNode('test'), $ele);
-        //$ele->parentNode->replaceChild($doc->createTextNode($image_marker), $ele);
-      } else {
-
-        // no image to replace found remove it
-        if ($ele) $ele->parentNode->removeChild($ele);
-      }
-
-
-      if (!$ele) {
-        //image not found or unknown format; remove it
-        $element->parentNode->removeChild($element);
-      }
-
-
-    }
-
-
-    return $this->myinnerHTML($doc);
   }
 
   function GetBaseUrl() {
