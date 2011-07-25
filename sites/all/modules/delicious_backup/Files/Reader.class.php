@@ -1,8 +1,16 @@
 <?php
+/*
+ * http://www.rainer-grundel.de/wissensdb/typo3/module/artikel/article/rssxml_newsfeeds_erstellen.html
+ */
+
 class Reader {
 
   const FIELD_ATTACH_IMAGE = 'delicious_bookmark_image';
-
+  const DIR_IMAGES = 'images';
+  const DIR_HTML = '';
+  
+  const EXTERNAL_HTML_FILENAME = 'html';
+  
   var $html = '';
   var $url = '';
   var $content = '';
@@ -12,8 +20,6 @@ class Reader {
   var $obj = null;
 
   var $logArray = array();
-
-
 
   function __construct($node, $cache = false) {
 
@@ -28,7 +34,7 @@ class Reader {
     $this->url = $this->obj->href;
 
     if ($cache == true) {
-      if (!$this->html = file_get_contents('public://delicious_backup/' . $this->obj->hash)) {
+      if (!$this->html = file_get_contents($this->GetDirectory(self::DIR_HTML, self::EXTERNAL_HTML_FILENAME))) {
         watchdog('delicious_backup', 'Error getting hash file %id - %url ', array('%id' => $this->obj->bid, '%url' => $this->obj->href));
       }
 
@@ -54,7 +60,7 @@ class Reader {
 
       if (is_numeric($obj)) $obj = db_query("SELECT nid,bid,hash,href FROM {delicious_bookmarks_backup} WHERE bid = :bid", array(':bid' => $obj))->fetchObject();
 
-      $file = 'public://delicious_backup/' . $obj->hash;
+      $file = $this->GetDirectory(self::DIR_HTML, self::EXTERNAL_HTML_FILENAME);
 
       // validate file
       if (!file_exists($file))
@@ -163,6 +169,15 @@ class Reader {
     return $filename;
   }
   
+  private function GetDirectory($type, $filename = '') {
+    
+    // we dont want double slahes
+    if ($filename != '') $filename = '/' . $filename;
+    if ($type != '') $type= '/' . $type;
+
+    return DELICIOUS_BACKUP_ROOT_DIR . $this->obj->hash . $type . $filename;
+  }  
+  
   function ImagesDownload() {
 
     if (!count($imgs = $this->GetImagesInfo($this->content)) > 0)
@@ -173,7 +188,7 @@ class Reader {
     foreach($imgs as $img) {
       try {
         
-        $img_path = 'public://link_image/'. $this->obj->hash .'/' . $this->TransliterateFilename(basename($img['absolute_url']));
+        $img_path = $this->GetDirectory(self::DIR_IMAGES, $this->TransliterateFilename(basename($img['absolute_url'])));
 
         // check if image already attached to this node
         if (!DeliciousBackup::ImageIsAttached(self::FIELD_ATTACH_IMAGE, $this->node, $img_path)) {
@@ -182,7 +197,7 @@ class Reader {
           $this->HTTPDownload($img['absolute_url'], $img_path);
 
           if (!DeliciousBackup::FileIsImage($img_path)) {
-            unlink($img_path);
+            if (file_exists($filename)) unlink($img_path);
             throw new Exception('error getting image: ' . t('Only JPEG, PNG and GIF images are allowed.') . ' : '. $img['absolute_url']);
           }
 
@@ -212,19 +227,6 @@ class Reader {
 
   private function CreateDOM($html) {
     return filter_dom_load($html);
-
-    $oldSetting = libxml_use_internal_errors(true);
-    libxml_clear_errors();
-
-
-    $doc = new DOMDocument();
-    #$doc->encoding = 'UTF-8'; // insert proper
-    $doc->loadHTML('<?xml encoding="UTF-8">' . $html);
-
-    libxml_clear_errors();
-    libxml_use_internal_errors( $oldSetting );
-
-    return $doc;
   }
 
   function GetHtml() {
@@ -271,8 +273,6 @@ class Reader {
         // use title tag of link is set
         if (!isset($img_t['title']) AND $parent->getAttribute('title')) $img_t['title'] = $parent->getAttribute('title');
       }
-      
-      $img_t['transliterate_filename']  = $this->TransliterateFilename($img_t['absolute_url']);
 
       $imgs[] = $img_t;
 
@@ -513,8 +513,9 @@ class Reader {
 
 
   public function GetExternalHTML() {
-
-    $filename = 'public://delicious_backup/' . $this->obj->hash;
+    
+        
+    $filename = $this->GetDirectory(self::DIR_HTML, self::EXTERNAL_HTML_FILENAME);
     try {
 
       // simple check to not download binary links here depens on url

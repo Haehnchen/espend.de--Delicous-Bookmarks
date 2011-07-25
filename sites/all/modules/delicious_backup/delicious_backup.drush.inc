@@ -94,9 +94,13 @@ function drush_delicious_backup_get_external_html() {
     ->execute();  
   
   foreach ($res as $row) {
-    drush_print('running:' . $row->nid . '/' . $row->bid);
-    $test = new Reader($row->nid);
-    $test->GetExternalHTML();
+    try {
+      drush_print('running:' . $row->nid . '/' . $row->bid);
+      $test = new Reader($row->nid);
+      $test->GetExternalHTML();    
+    } catch (Exception $e) {
+      drush_print('error:' . $e->getMessage());
+    }
   }
 }
 
@@ -128,7 +132,8 @@ function drush_delicious_backup_make_screenshot($filling = 'ascii') {
   foreach (delicious_backup_get_valid_bookmarks() as $row) {
     $node = node_load($row->nid);
    
-    $filename = 'screenshots/' . $row->hash . '.png';    
+    // @TODO convert internal path to absolute some better solution
+    $filename = str_replace('public://', '', DELICIOUS_BACKUP_ROOT_DIR . $row->hash . '/screenshot.png');
     
     // check if image already attached to this node
     if (DeliciousBackup::ImageIsAttached('field_delicious_screenshot', $node, basename($filename))) {
