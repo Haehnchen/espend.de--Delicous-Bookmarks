@@ -11,6 +11,12 @@ class Reader {
   
   const EXTERNAL_HTML_FILENAME = 'html';
   
+  const ERROR_LOG = 1;
+  const ERROR_THROW = 2;
+  const ERROR_LOG_AND_THROW = 4;
+  const ERROR_WATCHDOG = 8;
+  
+  
   var $html = '';
   var $url = '';
   var $content = '';
@@ -25,11 +31,11 @@ class Reader {
 
     $this->node = (is_numeric($node)) ? node_load($node) : $node;
     if(!$this->node)
-      throw new Exception('node unknown');
+      $this->Exception('node unknown');
 
     $this->obj = db_query("SELECT nid,bid,hash,href FROM {delicious_bookmarks_backup} WHERE nid = :nid", array(':nid' => $this->node->nid))->fetchObject();
     if(!$this->obj)
-      throw new Exception('database error');            
+      $this->Exception('database error');            
     
     $this->url = $this->obj->href;
 
@@ -38,9 +44,7 @@ class Reader {
         watchdog('delicious_backup', 'Error getting hash file %id - %url ', array('%id' => $this->obj->bid, '%url' => $this->obj->href));
       }
 
-      if ($node) {
-        $this->content = $this->node->body[$this->node->language][0]['value'];
-      }
+      $this->content = $this->node->body[$this->node->language][0]['value'];
 
     }
 
@@ -64,43 +68,43 @@ class Reader {
 
       // validate file
       if (!file_exists($file))
-        throw new Exception('no file content');
+        $this->Exception('no file content');
 
       if ($this->FileIsBinary($file))
-        throw new Exception('file is binary'); //@TODO: PDF download or other?
+        $this->Exception('file is binary'); //@TODO: PDF download or other?
 
       if (!$this->html = file_get_contents($file))
-        throw new Exception('error reading hash file');
+        $this->Exception('error reading hash file');
 
       if (strlen($this->html) == 0)
-        throw new Exception('zero content');
+        $this->Exception('zero content');
 
       if ($obj->nid == 0)
-        throw new Exception('no node nid found');
+        $this->Exception('no node nid found');
 
       if (isset($node->nid))
-        throw new Exception('not a valid node');
+        $this->Exception('not a valid node');
 
-      $this->log('got content html');
-
+      $this->log('got content html');      
+      
       $this->content = DeliciousBackup::Readability($this->html);
+      $this->log('filter with Readability');      
 
       // download image but only when set in var
       $this->ImagesDownload();
 
       $this->FilterContent();
 
-      $this->node = node_load($obj->nid);
       $this->node->body[$this->node->language][0]['value'] = $this->content;
       $this->node->body[$this->node->language][0]['format'] = 'full_html';
 
       node_save($this->node);
+      $this->log('node updated');      
 
       return true;
 
     } catch (Exception $e) {
-      $this->log('error on bid: ' . $obj->bid . ' ' . $e->getMessage());
-      watchdog('delicious_backup', 'error on bid: ' . $obj->bid . ' ' . $e->getMessage());
+      $this->Exception('error on bid: ' . $obj->bid, self::ERROR_WATCHDOG);
       return false;
     }
 
@@ -111,6 +115,8 @@ class Reader {
       if (!$field = field_get_items('node', $this->node, self::FIELD_ATTACH_IMAGE, $this->node->language)) {
         return;
       }
+      
+      $this->log('replacing ' . count($field) . ' images');
 
       $imgs = array();
       foreach($field as $img) {
@@ -139,10 +145,14 @@ class Reader {
     $res = drupal_http_request($url, $opts);
 
     if ($res->code != 200)
-      throw new Exception('error getting file: ' . $url);
+      $this->Exception('error getting file: ' . $url);
 
+    // create fiel directory set rights; drush uses other user!
     file_prepare_directory($dest_path = dirname($outputfile), FILE_CREATE_DIRECTORY | FILE_MODIFY_PERMISSIONS);
+    drupal_chmod($dest_path);
+    
     file_put_contents($outputfile, $res->data);
+    drupal_chmod($outputfile);
 
     return $res;
   }
@@ -191,8 +201,8 @@ class Reader {
           $this->HTTPDownload($img['absolute_url'], $img_path);
 
           if (!DeliciousBackup::FileIsImage($img_path)) {
-            if (file_exists($filename)) unlink($img_path);
-            throw new Exception('error getting image: ' . t('Only JPEG, PNG and GIF images are allowed.') . ' : '. $img['absolute_url']);
+            if (file_exists($img_path)) unlink($img_path);
+            $this->Exception('error getting image: ' . t('Only JPEG, PNG and GIF images are allowed.') . ' : '. $img['absolute_url']);
           }
 
           // create a file object to attach
@@ -202,8 +212,6 @@ class Reader {
           if (isset($img['alt'])) $file->alt = $img['alt'];
           if (isset($img['title'])) $file->title = $img['title'];
 
-          #print_r($file);
-          $images = field_get_items('node', $this->node, self::FIELD_ATTACH_IMAGE, $this->node->language);
           DeliciousBackup::AttachFileToNode($this->node, self::FIELD_ATTACH_IMAGE, $file, true);
 
           $this->log('Image downloaded: ' . $img['absolute_url']);
@@ -268,7 +276,7 @@ class Reader {
         if (!isset($img_t['title']) AND $parent->getAttribute('title')) $img_t['title'] = $parent->getAttribute('title');
       }
 
-      $imgs[] = $img_t;
+      if ($this->_is_img_url($img_t['absolute_url'])) $imgs[] = $img_t;
 
     }
 
@@ -371,14 +379,16 @@ class Reader {
 
     $config = array('safe'=>1, 'elements'=>'div, br, img, h1, h2, h3, h4 ,h5, a, em, b, strong, cite, code, ol, ul, li, dl, dt, dd, p, div, span, code, blockquote, pre', 'deny_attribute'=>'id, style, class');
 
+    $this->log('filtering content with htmLawed');
 
     $this->content = preg_replace('/<!--(.*)-->/Uis', '', $this->content);
     #$this->content = preg_replace('/<p>&nbsp;<\/p>/Uis', '', $this->content);
     $this->content = _filter_autop(htmLawed($this->content, $config));
 
     // replace external images with internal
-    if ($this->node)
+    if ($this->node) {
       $this->ReplaceImages();
+    }
   }
 
   private function log($str) {
@@ -402,20 +412,20 @@ class Reader {
 
       // simple check to not download binary links here depens on url
       if (preg_match('/\.(pdf|mp4|png|gif|jpeg|jpg|mp3|flv|doc|docx)$/i', $this->obj->href))
-        throw new Exception('binary file?');
+        $this->Exception('binary file?');
 
       // get only headers of file; get_headers do redirect and provide an array so filter it tricky
       $head = @get_headers($this->obj->href, 1);
       if (isset($head['Content-Type']) AND !preg_match('@(text|html)@i', is_array($head['Content-Type']) ? end($head['Content-Type']) : $head['Content-Type']))
-        throw new Exception('url response: is not html');
+        $this->Exception('url response: is not html');
 
       if (isset($head['Content-Length']) AND (is_array($head['Content-Length']) ? end($head['Content-Length']) : $head['Content-Length'])  > 1024 * 1014 * 5)
-        throw new Exception('url response: file to large');
+        $this->Exception('url response: file to large');
 
 
       $this->HTTPDownload($this->obj->href, $filename);
 
-      #module_invoke_all('delicious_backup_updated', $link->bid);
+      module_invoke_all('delicious_backup_updated', $this->obj->bid);
 
       db_update('delicious_bookmarks_backup')->fields(array('response_code' => 200, 'content_fetched' => time(), 'content_updated' => time(), 'queued' => 0))->condition('bid', $this->obj->bid)->execute();
       watchdog('delicious_backup', 'OK getting html content %id - %url ', array('%id' => $this->obj->bid, '%url' => $this->obj->href));
@@ -433,6 +443,22 @@ class Reader {
     }
   }
 
+  
+  private function Exception($msg, $severity = self::ERROR_LOG_AND_THROW, Exception $e = null) {
+
+    if($e) 
+      watchdog_exception($e);
+    
+    if ($severity & self::ERROR_LOG OR $severity & self::ERROR_LOG_AND_THROW)
+      $this->log($msg);
+    
+    if ($severity & self::ERROR_WATCHDOG)
+      watchdog('delicious_backup', $msg);
+    
+    if ($severity & self::ERROR_THROW OR $severity & self::ERROR_LOG_AND_THROW)
+      throw new Exception($msg);
+    
+  }
 }
 
 

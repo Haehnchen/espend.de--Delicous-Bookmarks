@@ -151,7 +151,7 @@ class DeliciousBackup {
     $node->{$field}[$node->language][]['fid'] = $file->fid;
     node_save($node);
 
-    if ($reloadNode == true)
+    if ($reloadNode == true) 
       $node = node_load($node->nid);
     
   }
