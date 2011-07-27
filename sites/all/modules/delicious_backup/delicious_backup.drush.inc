@@ -96,7 +96,7 @@ function drush_delicious_backup_get_external_html() {
   foreach ($res as $row) {
     try {
       drush_print('running:' . $row->nid . '/' . $row->bid);
-      $test = new Reader($row->nid);
+      $test = new DeliciousBackupReader($row->nid);
       $test->GetExternalHTML();    
     } catch (Exception $e) {
       drush_print('error:' . $e->getMessage());
@@ -121,7 +121,7 @@ function drush_delicious_backup_get_delicious_weight() {
 function drush_delicious_backup_get_all_content() {
   foreach (delicious_backup_get_valid_bookmarks() as $row) {
     drush_print('running:' . $row->nid . '/' . $row->bid);
-    $test = new Reader($row->nid);
+    $test = new DeliciousBackupReader($row->nid);
     $test->UpdateNode();
   }
 }

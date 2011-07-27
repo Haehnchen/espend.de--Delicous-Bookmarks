@@ -1,9 +1,5 @@
 <?php
-/*
- * http://www.rainer-grundel.de/wissensdb/typo3/module/artikel/article/rssxml_newsfeeds_erstellen.html
- */
-
-class Reader {
+class DeliciousBackupReader {
 
   const FIELD_ATTACH_IMAGE = 'delicious_bookmark_image';
   const DIR_IMAGES = 'images';
@@ -16,47 +12,64 @@ class Reader {
   const ERROR_LOG_AND_THROW = 4;
   const ERROR_WATCHDOG = 8;
   
-  
-  var $html = '';
-  var $url = '';
-  var $content = '';
-  var $node = null;
-  var $nid = null;
   var $getimages = true;
   var $obj = null;
 
-  var $logArray = array();
-
   function __construct($node, $cache = false) {
-
-    $this->node = (is_numeric($node)) ? node_load($node) : $node;
-    if(!$this->node)
+    $this->obj = new DeliciousBackupReaderObj();
+    
+    if(!$this->obj->node = (is_numeric($node)) ? node_load($node) : $node)
       $this->Exception('node unknown');
 
-    $this->obj = db_query("SELECT nid,bid,hash,href FROM {delicious_bookmarks_backup} WHERE nid = :nid", array(':nid' => $this->node->nid))->fetchObject();
-    if(!$this->obj)
-      $this->Exception('database error');            
+    $obj = db_query("SELECT nid,bid,hash,href FROM {delicious_bookmarks_backup} WHERE nid = :nid", array(':nid' => $this->obj->node->nid))->fetchObject();
+    if(!$obj) $this->Exception('database error');
     
-    $this->url = $this->obj->href;
-
+    
+    $this->obj->nid = $obj->nid;
+    $this->obj->bid = $obj->bid;
+    $this->obj->hash = $obj->hash;
+    $this->obj->href = $obj->href;
+    $this->obj->url = $obj->href;
+    
     if ($cache == true) {
-      if (!$this->html = file_get_contents($this->GetDirectory(self::DIR_HTML, self::EXTERNAL_HTML_FILENAME))) {
+      if (!$this->obj->html = file_get_contents($this->GetDirectory(self::DIR_HTML, self::EXTERNAL_HTML_FILENAME))) {
         watchdog('delicious_backup', 'Error getting hash file %id - %url ', array('%id' => $this->obj->bid, '%url' => $this->obj->href));
       }
 
-      $this->content = $this->node->body[$this->node->language][0]['value'];
+      $this->obj->content = $this->obj->node->body[$this->obj->node->language][0]['value'];
 
     }
+    
+    $this->obj->html = $this->obj->html;
+    $this->obj->content = $this->obj->content;
 
   }
 
   private function GetNode() {
-    if ($this->node == null)
-      $this->node = node_load($this->nid);
+    if ($this->obj->node == null)
+      $this->obj->node = node_load($this->nid);
 
-    return $this->node;
+    return $this->obj->node;
   }
+  
+  private function CallinternalHook($hook) {
+    //module_invoke_all('delicious_backup_pre_filter', $this);    
+    $path = drupal_get_path('module', 'delicious_backup') . '/filters';
+    require_once $path . '/DmBase.class.php' ;
 
+    foreach(file_scan_directory($path, '/.*\.class.php$/') as $inc) {
+      $class = str_replace('.class.php', '', $inc->filename);
+      if ($class == 'DmBase') continue;
+              
+      require_once $inc->uri;
+
+      $filter = new $class($this->obj);
+      $filter->{$hook}();
+      $this->obj = $filter->obj;
+      
+    }
+  }  
+  
   function UpdateNode() {
 
     try {
@@ -73,10 +86,10 @@ class Reader {
       if ($this->FileIsBinary($file))
         $this->Exception('file is binary'); //@TODO: PDF download or other?
 
-      if (!$this->html = file_get_contents($file))
+      if (!$this->obj->html = file_get_contents($file))
         $this->Exception('error reading hash file');
 
-      if (strlen($this->html) == 0)
+      if (strlen($this->obj->html) == 0)
         $this->Exception('zero content');
 
       if ($obj->nid == 0)
@@ -86,19 +99,20 @@ class Reader {
         $this->Exception('not a valid node');
 
       $this->log('got content html');      
-      
-      $this->content = DeliciousBackup::Readability($this->html);
-      $this->log('filter with Readability');      
 
-      // download image but only when set in var
-      $this->ImagesDownload();
+      $this->obj->content = DeliciousBackup::Readability($this->obj->html);
+      $this->log('filter with Readability');      
+      
+      $this->log('invoke: delicious_backup_pre_filter');
+      $this->CallinternalHook('PreFilter');
 
       $this->FilterContent();
+      $this->CallinternalHook('PostFilter');
+      
+      $this->obj->node->body[$this->obj->node->language][0]['value'] = $this->obj->content;
+      $this->obj->node->body[$this->obj->node->language][0]['format'] = 'full_html';
 
-      $this->node->body[$this->node->language][0]['value'] = $this->content;
-      $this->node->body[$this->node->language][0]['format'] = 'full_html';
-
-      node_save($this->node);
+      node_save($this->obj->node);
       $this->log('node updated');      
 
       return true;
@@ -110,30 +124,7 @@ class Reader {
 
   }
 
-  function ReplaceImages() {
-
-      if (!$field = field_get_items('node', $this->node, self::FIELD_ATTACH_IMAGE, $this->node->language)) {
-        return;
-      }
-      
-      $this->log('replacing ' . count($field) . ' images');
-
-      $imgs = array();
-      foreach($field as $img) {
-        $imgs[$img['filename']] = array(
-          'width' => '200',
-          'src' => file_create_url($img['uri']),
-         );
-
-        if ($img['alt']) $imgs[$img['filename']]['alt'] = $img['alt'];
-        if ($img['title']) $imgs[$img['filename']]['title'] = $img['title'];
-
-      };
-      
-      $this->ReplaceExternalImages($imgs);
-  }
-
-  private function HTTPDownload($url, $outputfile, $overwrite = false) {
+  protected function HTTPDownload($url, $outputfile, $overwrite = false) {
 
     $opts = array(
         'timeout' => 10,
@@ -157,7 +148,7 @@ class Reader {
     return $res;
   }
 
-  private function TransliterateFilename($filename) {
+  protected function TransliterateFilename($filename) {
 
     $filename = urldecode($filename);    
     
@@ -175,7 +166,7 @@ class Reader {
     return $filename;
   }
   
-  private function GetDirectory($type, $filename = '') {
+  protected function GetDirectory($type, $filename = '') {
     
     // we dont want double slahes
     if ($filename != '') $filename = '/' . $filename;
@@ -183,158 +174,18 @@ class Reader {
 
     return DELICIOUS_BACKUP_ROOT_DIR . $this->obj->hash . $type . $filename;
   }  
-  
-  function ImagesDownload() {
-
-    // nothing todo here
-    if ($this->getimages == false OR !count($imgs = $this->GetImagesInfo($this->content)) > 0) return;
-
-    foreach($imgs as $img) {
-      try {
-        
-        $img_path = $this->GetDirectory(self::DIR_IMAGES, $this->TransliterateFilename(basename($img['absolute_url'])));
-
-        // check if image already attached to this node
-        if (!DeliciousBackup::ImageIsAttached(self::FIELD_ATTACH_IMAGE, $this->node, $img_path)) {
-          
-          // download image and attach to node
-          $this->HTTPDownload($img['absolute_url'], $img_path);
-
-          if (!DeliciousBackup::FileIsImage($img_path)) {
-            if (file_exists($img_path)) unlink($img_path);
-            $this->Exception('error getting image: ' . t('Only JPEG, PNG and GIF images are allowed.') . ' : '. $img['absolute_url']);
-          }
-
-          // create a file object to attach
-          $file = DeliciousBackup::UriToFile($img_path);
-
-          // attributes
-          if (isset($img['alt'])) $file->alt = $img['alt'];
-          if (isset($img['title'])) $file->title = $img['title'];
-
-          DeliciousBackup::AttachFileToNode($this->node, self::FIELD_ATTACH_IMAGE, $file, true);
-
-          $this->log('Image downloaded: ' . $img['absolute_url']);
-          
-        }
-
-      } catch (Exception $e) {
-        $this->log('ImageAttach: ' . $e->getMessage());
-        watchdog_exception('delicious_backup', $e);
-      }
-    }
-
-    return true;
-  }
-
-  private function CreateDOM($html) {
+ 
+  protected function CreateDOM($html) {
     return filter_dom_load($html);
   }
 
-  function GetHtml() {
-    $this->html = file_get_contents($this->url);
-  }
-
-  function SetHtml($html) {
-    $this->html = $html;
-  }
-
-  function GetImagesInfo() {
-
-    /*
-     *     [2] => Array
-        (
-            [src] => http://0.gravatar.com/avatar/24bb29f53072c133590b929e56d6e298?s=90&d=http%3A%2F%2F0.gravatar.com%2Favatar%2Fad516503a11cd5ca435acc9bb6523536%3Fs%3D90&r=G
-            [absolute_url] => http://0.gravatar.com/avatar/24bb29f53072c133590b929e56d6e298?s%3D90%26d%3Dhttp%3A%2F%2F0.gravatar.com%2Favatar%2Fad516503a11cd5ca435acc9bb6523536%3Fs%3D90%26r%3DG
-        )
-     *
-     */
-    $xpath = new DOMXPath($this->CreateDOM($this->content));
-
-    $imgs = array();
-
-    $baseurl = $this->GetBaseUrl();
-
-    foreach($xpath->query( "//img") as $element) {
-      // add image data to array
-      $img_t = array(
-       'src' => $src = $element->getAttribute( 'src' ),
-       'absolute_url' => url_to_absolute($baseurl, $src),
-      );
-
-      if ($element->getAttribute('title')) $img_t['title'] = $element->getAttribute('title');
-      if ($element->getAttribute('alt')) $img_t['alt'] = $element->getAttribute('alt');
-
-      // check if image is a thumbnail; mostly it is clickable (lightbox)
-      $parent = $element->parentNode;
-      if ($parent->nodeName == 'a' AND $this->_is_img_url($parent->getAttribute( 'href')) AND url_to_absolute($baseurl, $parent->getAttribute( 'href' )) != $img_t['absolute_url']) {
-        $img_t['thumbnail'] = $img_t['absolute_url'];
-        $img_t['absolute_url'] = url_to_absolute($baseurl, $parent->getAttribute( 'href' ));
-        $img_t['parent'] = '1';
-
-        // use title tag of link is set
-        if (!isset($img_t['title']) AND $parent->getAttribute('title')) $img_t['title'] = $parent->getAttribute('title');
-      }
-
-      if ($this->_is_img_url($img_t['absolute_url'])) $imgs[] = $img_t;
-
-    }
-
-    return $imgs;
-
-  }
-
-  private function _is_img_url($url) {
+  protected function IsImgUrl($url) {
     return preg_match('@\.(png|jpg|gif|jpeg)$@i', $url);
-  }
-
-  private function ReplaceExternalImages($imgs) {
-
-    $doc = $this->CreateDOM($this->content);
-
-    $xpath = new DOMXPath($doc);
-
-    foreach ($xpath->query("//img") as $element) {
-
-      $ele = $element;
-      $img_src = $element->getAttribute('src');
-
-      if ($element->parentNode->nodeName == 'a' AND $this->_is_img_url($url = url_to_absolute($this->url, $element->parentNode->getAttribute('href')))) {
-        // @TODO: $url can contant javascript: http://www.rainer-grundel.de/wissensdb/typo3/module/artikel/article/rssxml_newsfeeds_erstellen.html
-        // 
-        // lightbox pictures
-        $ele = $element->parentNode;
-        $img_src = $element->parentNode->getAttribute('href');
-      }
-
-
-      $filename = $this->TransliterateFilename(basename($img_src));
-
-      // Replace external image src tags with internal if we get a internal url
-      if ($ele AND isset($imgs[$filename])) {
-
-        // create new image element and add attributes
-        $new_img = $doc->createElement('img');
-        foreach ($imgs[$filename] as $attr => $value)
-          $new_img->setAttribute($attr, $value);
-
-        $ele->parentNode->replaceChild($new_img, $ele);
-
-      } else {
-
-        // no image to replace found; remove it
-        $ele->parentNode->removeChild($ele);
-      }
-
-    }
-
-
-    $this->content = $this->myinnerHTML($doc);
   }
 
   function GetBaseUrl() {
 
-    $xpath = new DOMXPath($this->CreateDOM($this->html));
+    $xpath = new DOMXPath($this->CreateDOM($this->obj->html));
 
     //http://www.compago.it/php/phpckbk-CHP-13-SECT-17.html
 
@@ -346,10 +197,10 @@ class Reader {
 
 
     // return fallback (mostly complete url for save if in main app)
-    return $this->url;
+    return $this->obj->url;
   }
 
-  private function myinnerHTML($doc){
+  protected function myinnerHTML($doc){
     return filter_dom_serialize($doc);
 
     //http://svn.beerpla.net/repos/public/PHP/SmartDOMDocument/trunk/SmartDOMDocument.class.php
@@ -381,26 +232,22 @@ class Reader {
 
     $this->log('filtering content with htmLawed');
 
-    $this->content = preg_replace('/<!--(.*)-->/Uis', '', $this->content);
-    #$this->content = preg_replace('/<p>&nbsp;<\/p>/Uis', '', $this->content);
-    $this->content = _filter_autop(htmLawed($this->content, $config));
+    $this->obj->content = preg_replace('/<!--(.*)-->/Uis', '', $this->obj->content);
+    #$this->obj->content = preg_replace('/<p>&nbsp;<\/p>/Uis', '', $this->obj->content);
+    $this->obj->content = _filter_autop(htmLawed($this->obj->content, $config));
 
-    // replace external images with internal
-    if ($this->node) {
-      $this->ReplaceImages();
-    }
   }
 
-  private function log($str) {
-    $this->logArray[] = $str;
+  public function log($str) {
+    $this->obj->logArray[] = $str;
   }
 
   public function GetLog() {
-    return implode("\r\n", $this->logArray);
+    return implode("\r\n", $this->obj->logArray);
   }
 
   public function GetContent() {
-    return $this->content;
+    return $this->obj->content;
   }
 
 
@@ -459,8 +306,27 @@ class Reader {
       throw new Exception($msg);
     
   }
+
 }
 
+  class DeliciousBackupReaderObj {
+    
+    var $nid = 0;
+    var $bid = 0;
+    var $hash = '';
+    var $href = '';
+    var $url = '';
+    
+    var $content = '';
+    var $html = '';
+    var $node = null;
+    var $logArray = array();
+    
+    function __construct() {
+
+    }
+    
+  }
 
 
 ?>
