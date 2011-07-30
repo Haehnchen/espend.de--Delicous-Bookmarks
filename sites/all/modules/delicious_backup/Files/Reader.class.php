@@ -32,11 +32,13 @@ class DeliciousBackupReader {
     $this->obj->url = $obj->href;
     
     if ($cache == true) {
-      if (!$this->obj->html = file_get_contents($this->GetDirectory(self::DIR_HTML, self::EXTERNAL_HTML_FILENAME))) {
-        watchdog('delicious_backup', 'Error getting hash file %id - %url ', array('%id' => $this->obj->bid, '%url' => $this->obj->href));
+      if (!$this->obj->html = @file_get_contents($this->GetDirectory(self::DIR_HTML, self::EXTERNAL_HTML_FILENAME))) {
+        $this->log('no html found download external html');
+        $this->GetExternalHTML();
+        //$this->Exception('Error getting hash file ' . $this->obj->bid .' - ' . $this->obj->href, self::ERROR_LOG_AND_THROW);
       }
 
-      $this->obj->content = $this->obj->node->body[$this->obj->node->language][0]['value'];
+      if (isset($this->obj->node->body[$this->obj->node->language])) $this->obj->content = $this->obj->node->body[$this->obj->node->language][0]['value'];
 
     }
     
@@ -291,10 +293,10 @@ class DeliciousBackupReader {
   }
 
   
-  private function Exception($msg, $severity = self::ERROR_LOG_AND_THROW, Exception $e = null) {
+  protected function Exception($msg, $severity = self::ERROR_LOG_AND_THROW, Exception $e = null) {
 
     if($e) 
-      watchdog_exception($e);
+      watchdog_exception($msg, $e);
     
     if ($severity & self::ERROR_LOG OR $severity & self::ERROR_LOG_AND_THROW)
       $this->log($msg);

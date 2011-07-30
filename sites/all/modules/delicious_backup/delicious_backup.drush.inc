@@ -77,8 +77,34 @@ function delicious_backup_drush_command() {
     #'aliases' => array('mmas'), 
     'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_FULL, // No bootstrap at all.
   );   
+  
+  
+  $items['run-all'] = array(
+    'description' => "Makes a delicious sandwich.", 
+    'arguments' => array(
+      'filling' => 'The type of the sandwich (turkey, cheese, etc.)',
+    ), 
+    'options' => array(
+      'spreads' => 'Comma delimited list of spreads (e.g. mayonnaise, mustard)',
+    ), 
+    'examples' => array(
+      'drush make-me-a-sandwich turkey --spreads=ketchup,mustard',
+    ), 
+    #'aliases' => array('mmas'), 
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_FULL, // No bootstrap at all.
+  );     
+  
 
   return $items;
+}
+
+function drush_delicious_backup_run_all() {
+  foreach (delicious_backup_get_valid_bookmarks() as $row) {
+    drush_print('running:' . $row->nid . '/' . $row->bid);
+    $test = new DeliciousBackupReader($row->nid);
+    $test->UpdateNode();
+    drush_print($test->GetLog());
+  }
 }
 
 function drush_delicious_backup_get_bookmarks() {
