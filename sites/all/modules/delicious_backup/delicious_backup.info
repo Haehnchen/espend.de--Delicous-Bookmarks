@@ -4,6 +4,7 @@ version = VERSION
 core = 7.x
 files[] = delicous_backup.module
 files[] = delicous_backup.install
+files[] = Files/DeliciousBackup.class.php
 files[] = Files/Reader.class.php
 files[] = Files/Readability.php
 files[] = Files/JSLikeHTMLElement.php

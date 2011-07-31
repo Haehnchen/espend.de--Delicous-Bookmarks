@@ -46,109 +46,32 @@ function delicious_backup_install() {
     field_create_instance($instance);
   }
 
-
-
-  // adjust the weight so it's called after a dependant module called 'categories'
-  $weight = db_query("SELECT weight FROM {system} WHERE name = :name", array(':name' => 'categories'))->fetchField();
-  db_update('system')->fields(array(
-    'weight' => $weight + 1,
-  ))
-  ->condition('name', 'delicious_bookmark')
-  ->execute();
-
-  // Create tables.
-
 }
 
 function _delicious_backup_installed_fields() {
-  $t = get_t();
-  $fields = array(
-    // text field
-    'delicious_bookmark_source' => array(
-      'field_name'   => 'delicious_bookmark_source',
-      'label'        => $t('Artcile Source'),
-      'cardinality'  => 1,
-      'type'         => 'text',
-      'settings'     => array(
-        'max_length'  => 1000,
-      ),
-    ),
-    // image field
-    'delicious_bookmark_image' => array(
-      'field_name' => 'delicious_bookmark_image',
-      'label' => $t('Image'),
-      'cardinality' => FIELD_CARDINALITY_UNLIMITED,
-      'type' => 'image',
-      'settings' => array(
-        'default_image' => 0,
-        'uri_scheme' => 'public',
-      ),
-    ),
-    // taxonomy term reference field, referencing a vocabulary called 'authors'
-    'delicious_bookmark_tags' => array(
-      'field_name' => 'delicious_backup_tags',
-      'type' => 'taxonomy_term_reference',
-      'cardinality' => FIELD_CARDINALITY_UNLIMITED,
-      'settings' => array(
-        'allowed_values' => array(
-          array(
-            'vocabulary' => 'delicious_backup_tags',
-            'parent' => 0,
-          ),
-        ),
-      ),
-    ),
 
-  );
+  $fields = array();
+  DeliciousBackup::Invoke($fields, 'fields');
 
-  return $fields;
+  return isset($fields['fields']) ? $fields['fields'] : array();
 }
 
 function _delicious_backup_installed_instances() {
-  $t = get_t();
-  $fields = array(
-    // text field
-    'delicious_bookmark_source' => array(
-      'field_name'   => 'delicious_bookmark_source',
-      'label'        => $t('Artcile Source'),
-      'cardinality'  => 1,
-      'type'         => 'text',
-      'settings'     => array(
-        'max_length'  => 1000,
-      ),
-    ),
-    // image field
-    'delicious_bookmark_image' => array(
-      'field_name' => 'delicious_bookmark_image',
-      'label' => $t('Image'),
-      'cardinality' => 1,
-      'type' => 'image',
-      'settings' => array(
-        'default_image' => 0,
-        'uri_scheme' => 'public',
-      ),
-    ),
-    // instance of the taxonomy term reference field above
-    'delicious_backup_tags' => array(
-      'field_name' => 'delicious_backup_tags',
-      'entity_type' => 'node',
-      'label' => $t('Delicious Bookmark Tags'),
-      'bundle' => 'delicious_backup_tags',
-      'required' => FALSE,
-      'widget' => array(
-        'type' => 'taxonomy_autocomplete',
-      ),
-    ),
 
-  );
+  $fields = array();
+  DeliciousBackup::Invoke($fields, 'fields');
 
-  return $fields;
+  return isset($fields['instances']) ? $fields['instances'] : array();
 }
-
 
 function delicious_backup_uninstall() {
 
-  //drupal_uninstall_schema('delicious_backup');
+  //
+  require_once drupal_get_path('module', 'delicious_backup') . '/Files/Reader.class.php';
+  require_once drupal_get_path('module', 'delicious_backup') . '/Files/DeliciousBackup.class.php';
+
+
+  drupal_uninstall_schema('delicious_backup');
 
   // Gather all the example content that might have been created while this
   // module was enabled.  Simple selects still use db_query().
@@ -176,7 +99,6 @@ function delicious_backup_uninstall() {
   //foreach ($instances as $instance_name => $instance) {
   //    field_delete_instance($instance);
   //}
-
   // Delete our content type
   // http://api.drupal.org/api/function/node_type_delete/7
   node_type_delete('delicious_bookmark');
@@ -187,13 +109,9 @@ function delicious_backup_uninstall() {
 
   variable_del('delicious_backup_username');
   variable_del('delicious_backup_password');
-  
+
   variable_del('delicious_backup_last_cron');
   variable_del('delicious_backup_cron_time');
-
-
-
-
 
   $vocabulary = taxonomy_vocabulary_machine_name_load('delicious_backup_tags');
   taxonomy_vocabulary_delete($vocabulary->vid);
@@ -201,101 +119,118 @@ function delicious_backup_uninstall() {
   drupal_set_message('The delicious_backup module was uninstalled successfully.');
 }
 
-
 function delicious_backup_schema() {
   $schema = array();
-  
-$schema['delicious_bookmarks_backup'] = array(
-  'description' => 'TODO: please describe this table!',
-  'fields' => array(
-    'bid' => array(
-      'description' => 'TODO: please describe this field!',
-      'type' => 'serial',
-      'not null' => TRUE,
-    ),
-    'nid' => array(
-      'description' => 'TODO: please describe this field!',
-      'type' => 'int',
-      'not null' => TRUE,
-      'default' => 0,
-    ),
-    'href' => array(
-      'description' => 'TODO: please describe this field!',
-      'type' => 'varchar',
-      'length' => '255',
-      'not null' => TRUE,
-      'default' => '',
-    ),
-    'hash' => array(
-      'description' => 'TODO: please describe this field!',
-      'type' => 'varchar',
-      'length' => '64',
-      'not null' => TRUE,
-      'default' => '',
-    ),
-    'description' => array(
-      'description' => 'TODO: please describe this field!',
-      'type' => 'varchar',
-      'length' => '400',
-      'not null' => TRUE,
-      'default' => '',
-    ),
-    'time' => array(
-      'description' => 'TODO: please describe this field!',
-      'type' => 'int',
-      'not null' => FALSE,
-      'default' => 0,
-    ),
-    'extended' => array(
-      'description' => 'TODO: please describe this field!',
-      'type' => 'text',
-      'not null' => FALSE,
-    ),
-    'tag' => array(
-      'description' => 'TODO: please describe this field!',
-      'type' => 'varchar',
-      'length' => '255',
-      'not null' => TRUE,
-      'default' => '',
-    ),
-    'meta' => array(
-      'description' => 'TODO: please describe this field!',
-      'type' => 'varchar',
-      'length' => '64',
-      'not null' => TRUE,
-      'default' => '',
-    ),
-    'last_found' => array(
-      'description' => 'TODO: please describe this field!',
-      'type' => 'int',
-      'not null' => TRUE,
-      'default' => 0,
-    ),
-    'content_fetched' => array(
-      'description' => 'TODO: please describe this field!',
-      'type' => 'int',
-      'not null' => TRUE,
-      'default' => 0,
-    ),
-    'response_code' => array(
-      'description' => 'TODO: please describe this field!',
-      'type' => 'int',
-      'not null' => TRUE,
-      'default' => 0,
-    ),
-  ),
-  'primary key' => array('bid'),
-  'unique keys' => array(
-    'href' => array('href')
-  ),
-  'indexes' => array(
-    'nid' => array('nid'),
-    'response_code' => array('response_code'),
-  ),
-);
 
-return $schema;
+  $schema['delicious_bookmarks_backup'] = array(
+    'description' => 'TODO: please describe this table!',
+    'fields' => array(
+      'bid' => array(
+        'description' => 'TODO: please describe this field!',
+        'type' => 'serial',
+        'not null' => TRUE,
+      ),
+      'nid' => array(
+        'description' => 'TODO: please describe this field!',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'href' => array(
+        'description' => 'TODO: please describe this field!',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'hash' => array(
+        'description' => 'TODO: please describe this field!',
+        'type' => 'varchar',
+        'length' => '64',
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'description' => array(
+        'description' => 'TODO: please describe this field!',
+        'type' => 'varchar',
+        'length' => '400',
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'time' => array(
+        'description' => 'TODO: please describe this field!',
+        'type' => 'int',
+        'not null' => FALSE,
+        'default' => 0,
+      ),
+      'extended' => array(
+        'description' => 'TODO: please describe this field!',
+        'type' => 'text',
+        'not null' => FALSE,
+      ),
+      'tag' => array(
+        'description' => 'TODO: please describe this field!',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'meta' => array(
+        'description' => 'TODO: please describe this field!',
+        'type' => 'varchar',
+        'length' => '64',
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'last_found' => array(
+        'description' => 'last time delicious gave use the row e.g. old wants delete on delicious',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'content_fetched' => array(
+        'description' => 'last read of html content from url',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'content_updated' => array(
+        'description' => 'the time the content was marked as changed e.g. author edited his text',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'response_code' => array(
+        'description' => 'TODO: please describe this field!',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'response_errors' => array(
+        'description' => 'TODO: please describe this field!',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'queued' => array(
+        'description' => 'TODO: please describe this field!',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+    ),
+    'primary key' => array('bid'),
+    'unique keys' => array(
+      'href' => array('href')
+    ),
+    'indexes' => array(
+      'nid' => array('nid'),
+      'response_code' => array('response_code'),
+    ),
+  );
 
+
+  return $schema;
 }
 
 function delicious_backup_enable() {
@@ -305,8 +240,7 @@ function delicious_backup_enable() {
   field_associate_fields('taxonomy');
   // Create the forum vocabulary if it does not exist.
 
-  $vocabulary = taxonomy_vocabulary_machine_name_load('delicious_backup_tags');
-  if (!$vocabulary) {
+  if (!$vocabulary = taxonomy_vocabulary_machine_name_load('delicious_backup_tags')) {
     $edit = array(
       'name' => t('Delicious Backup Tags'),
       'machine_name' => 'delicious_backup_tags',

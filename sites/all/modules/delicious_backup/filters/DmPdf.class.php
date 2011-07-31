@@ -52,5 +52,35 @@ class DmPdf extends DmBase {
     DeliciousBackup::AttachFileToNode($this->obj->node, self::FIELD, DeliciousBackup::UriToFile('public://' . $filename), true);
   }    
   
+  static public function fields() {
+    $t = get_t();
+    $field = array(
+      self::FIELD => array(
+        'field_name' => self::FIELD,
+        'cardinality' => 1,
+        'type' => 'file',
+        'settings' => array(
+          'uri_scheme' => 'public',
+        ),
+      ),
+    );
+
+    $instance = array(
+      self::FIELD => array(
+        'field_name' => self::FIELD,
+        'label' => $t('PDF'),        
+        'settings' => array(
+          'file_extensions' => 'pdf',
+          #'file_directory' => '',
+        ),
+      ),
+    );
+
+    return array(
+      'fields' => $field,
+      'instances' => $instance,
+    );
+  }
+  
 }
 ?>

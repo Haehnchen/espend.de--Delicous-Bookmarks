@@ -4,6 +4,7 @@ class DmWebsiteScreenshot extends DmBase {
   
   const DIR_SCREENSHOT = '';
   const SCREENSHOT_FORMAT = 'png';
+  const FIELD = 'field_delicious_screenshot';
   
   public function postFilter() {
     $this->log(__CLASS__ . ':' . __FUNCTION__);
@@ -20,7 +21,7 @@ class DmWebsiteScreenshot extends DmBase {
 
     
     // check if image already attached to this node
-    if (DeliciousBackup::ImageIsAttached('field_delicious_screenshot', $this->obj->node, basename($filename))) {
+    if (DeliciousBackup::ImageIsAttached(self::FIELD, $this->obj->node, basename($filename))) {
       return;
     }
 
@@ -47,17 +48,40 @@ class DmWebsiteScreenshot extends DmBase {
     #print_r($test);
     #exit;
     
-    DeliciousBackup::AttachFileToNode($this->obj->node, 'field_delicious_screenshot', DeliciousBackup::UriToFile('public://' . $filename), true);
+    DeliciousBackup::AttachFileToNode($this->obj->node, self::FIELD, DeliciousBackup::UriToFile('public://' . $filename), true);
   }    
+  
+  static public function fields() {
+    $t = get_t();
+    $field = array(
+      self::FIELD => array(
+        'field_name' => self::FIELD,
+        'cardinality' => 1,
+        'type' => 'image',
+        'settings' => array(
+          'uri_scheme' => 'public',
+        ),
+      ),
+    );
+
+    $instance = array(
+      self::FIELD => array(
+        'field_name' => self::FIELD,
+        'label' => $t('Screenshot'),
+        'settings' => array(
+          'file_extensions' => 'png gif jpg jpeg',
+        ),
+      ),
+    );
+
+    return array(
+      'fields' => $field,
+      'instances' => $instance,
+    );
+  }  
   
 }
 ?>
 
 
-<?php
 
-
-
-   
-
-?>

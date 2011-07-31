@@ -1,6 +1,10 @@
 <?php
 
 class DmImages extends DmBase {
+  
+  const FIELD = self::FIELD_ATTACH_IMAGE;
+  
+  
   public function preFilter() {
     $this->log(__CLASS__ . ':' . __FUNCTION__);
     $this->ImagesDownload();
@@ -158,6 +162,35 @@ class DmImages extends DmBase {
 
     $this->obj->content = $this->myinnerHTML($doc);
   }  
+  
+  static public function fields() {
+    $t = get_t();
+    $field = array(
+      self::FIELD => array(
+        'field_name' => self::FIELD,
+        'cardinality' => FIELD_CARDINALITY_UNLIMITED,
+        'type' => 'image',
+        'settings' => array(
+          'uri_scheme' => 'public',
+        ),
+      ),
+    );
+
+    $instance = array(
+      self::FIELD => array(
+        'field_name' => self::FIELD,
+        'label' => $t('Image'),
+        'settings' => array(
+          'file_extensions' => 'png gif jpg jpeg',
+        ),
+      ),
+    );
+
+    return array(
+      'fields' => $field,
+      'instances' => $instance,
+    );
+  }   
   
 }
 ?>

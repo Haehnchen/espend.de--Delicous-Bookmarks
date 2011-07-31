@@ -12,5 +12,7 @@ class DmBase extends DeliciousBackupReader {
   public function install() { }
   public function uninstall() { }
   public function schema() { }
+  
+  static public function fields() { return array(); }
 }
 ?>
