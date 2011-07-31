@@ -126,14 +126,29 @@ class DeliciousBackupReader {
 
   }
 
+  protected function HTTPDownloadAutoPath($url, $filename = '', $overwrite = false) {
+    
+    if ($filename == '') $filename = md5($url);
+    
+    $subpath = isset($this->OverwriteHTTPDir) ? $this->OverwriteHTTPDir : strtolower(get_class($this));
+    $path = DELICIOUS_BACKUP_ROOT_DIR . $this->obj->hash . '/' . $subpath;
+    
+    return $this->HTTPDownload($url, $path . '/' . $filename, $overwrite);
+  }
+  
   protected function HTTPDownload($url, $outputfile, $overwrite = false) {
 
     $opts = array(
         'timeout' => 10,
     );
 
-    if ($overwrite == false AND file_exists($outputfile))
-      return true;
+    if ($overwrite == false AND file_exists($outputfile)) {
+      $test = new stdClass();
+      $test->code = 200;
+      $test->data = file_get_contents($outputfile);
+      $test->cached = true;
+      return $test;
+    }
 
     $res = drupal_http_request($url, $opts);
 

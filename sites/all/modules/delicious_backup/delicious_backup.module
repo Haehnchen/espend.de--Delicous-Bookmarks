@@ -14,15 +14,6 @@ function delicious_backup_bookmark_access($node) {
   return $node->type == 'delicious_bookmark' && user_access('view content');
 }
 
-function _delicious_back_preload2(&$content) {
-  
-  #if (preg_match("/<code>.*(<br(|\s*\/)>).*<\/code>/m", $content, $res)) {
-  #  $content = preg_replace("/(<br(|\s*\/)>)/", "\n", $content);
-  #}  
-
-  #drupal_add_css('code { white-space: pre; background-color:red;} ', 'inline');
-  
-}
 
 /**
  * Implements hook_delicious_backup_updated().

@@ -41,7 +41,7 @@ class DmPdf extends DmBase {
     }
     
     // generated file is no image so delete it or attach it to the node
-    if (file_exists('public://' . $filename) AND filesize('public://' . $filename) == 0) {
+    if (file_exists('public://' . $filename) AND @filesize('public://' . $filename) == 0) {
       $this->log(__CLASS__ . ':' . __FUNCTION__ . ' not a valid file:' . 'public://' . $filename );
       drupal_unlink('public://' . $filename);
       return;

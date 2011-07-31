@@ -107,26 +107,16 @@ function delicious_backup_block_view($delta = '') {
 
   $obj = db_query("SELECT * FROM {delicious_bookmarks_backup} WHERE nid = :nid", array(':nid' => $nid))->fetchAssoc();
 
-  
-
-
   $node = node_load($nid);
-  
-  
-
-  #$test = field_attach_view('node', $node, 'full');
-  #print_r($test);
-  #print_r($node);
-  #exit;
 
   $block['content'] = render(field_view_field('node', $node, 'field_delicious_screenshot', 'default'));
   
   $test = field_view_field('node', $node, 'field_delicious_pdf', 'default');
-  $test[0]['#file']->description = 'Download Webseite as PDF';
+  $test[0]['#file']->description = 'Download website as PDF';
  
   $block['content'] .= render($test);
 
-  $block['content'] .= _delicious_backup_get_bookmark_info($nid);
+  $block['content'] .= _delicious_backup_get_bookmark_info($nid, 'full');
 
   return $block;
 //  }

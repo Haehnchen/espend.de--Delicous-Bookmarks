@@ -3,6 +3,7 @@
 class DmDeliciousSharedCount extends DmBase {
   
   const FLAG_NAME = 'delicious_weight';
+  const DELICOIUS_JSON_URL = 'http://feeds.delicious.com/v2/json/urlinfo/';
   
   public function postFilter() {
     $this->log(__CLASS__ . ':' . __FUNCTION__);
@@ -20,16 +21,22 @@ class DmDeliciousSharedCount extends DmBase {
   }
   
   private function GetDeliciousWeight($hash) {
-    $opts = array('timeout' => 10);
-    $url = 'http://feeds.delicious.com/v2/json/urlinfo/' . $hash;
-    
-    $res = drupal_http_request($url, $opts);
-    
-    if ($res->code == 200) {
-      $ar = drupal_json_decode($res->data);
-      if (isset($ar[0])) return current($ar);
+
+    try {
+      
+      $url = self::DELICOIUS_JSON_URL . $hash;
+      $res = $this->HTTPDownloadAutoPath($url, $hash);
+            
+      if (!$ret = drupal_json_decode($res->data)) {
+        $this->Exception('Error decoding json request');
+      }
+      
+      return $ret;
+      
+    } catch (Exception $e) {
+      $this->log($e->getMessage());
     }
-    
+
     return array();
   }    
   
