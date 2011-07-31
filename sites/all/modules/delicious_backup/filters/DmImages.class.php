@@ -2,7 +2,8 @@
 
 class DmImages extends DmBase {
   
-  const FIELD = self::FIELD_ATTACH_IMAGE;
+  const FIELD = 'delicious_bookmark_image';
+  const DIR_IMAGES = 'images';
   
   
   public function preFilter() {
@@ -27,7 +28,7 @@ class DmImages extends DmBase {
         $img_path = $this->GetDirectory(self::DIR_IMAGES, $this->TransliterateFilename(basename($img['absolute_url'])));
 
         // check if image already attached to this node
-        if (!DeliciousBackup::ImageIsAttached(self::FIELD_ATTACH_IMAGE, $this->obj->node, $img_path)) {
+        if (!DeliciousBackup::ImageIsAttached(self::FIELD, $this->obj->node, $img_path)) {
           
           // download image and attach to node
           $this->HTTPDownload($img['absolute_url'], $img_path);
@@ -44,7 +45,7 @@ class DmImages extends DmBase {
           if (isset($img['alt'])) $file->alt = $img['alt'];
           if (isset($img['title'])) $file->title = $img['title'];
 
-          DeliciousBackup::AttachFileToNode($this->obj->node, self::FIELD_ATTACH_IMAGE, $file, true);
+          DeliciousBackup::AttachFileToNode($this->obj->node, self::FIELD, $file, true);
 
           $this->log('Image downloaded: ' . $img['absolute_url']);
           
@@ -61,7 +62,7 @@ class DmImages extends DmBase {
   
   private function ReplaceImages() {
 
-      if (!$field = field_get_items('node', $this->obj->node, self::FIELD_ATTACH_IMAGE, $this->obj->node->language)) {
+      if (!$field = field_get_items('node', $this->obj->node, self::FIELD, $this->obj->node->language)) {
         return;
       }
       

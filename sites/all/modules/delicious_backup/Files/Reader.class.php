@@ -1,8 +1,6 @@
 <?php
 class DeliciousBackupReader {
 
-  const FIELD_ATTACH_IMAGE = 'delicious_bookmark_image';
-  const DIR_IMAGES = 'images';
   const DIR_HTML = '';
   
   const EXTERNAL_HTML_FILENAME = 'html';
