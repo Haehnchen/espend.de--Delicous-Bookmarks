@@ -8,12 +8,12 @@ function delicious_backup_bookmark_upd($node) {
 
 
   //delicious_backup_get_content($bid);
-  $node = node_load(8540);
+  #$node = node_load($node->nid);
   if ($images = field_get_items('node', $node, 'delicious_bookmark_image', $node->language)) {
     #print_r($images); exit;
   }
-  #echo $node->title;
-  $test = new Reader($node);
+    #echo $node->title;
+  $test = new DeliciousBackupReader($node, true);
   $test->getimages = true;
   $test->UpdateNode();
   

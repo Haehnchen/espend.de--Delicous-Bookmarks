@@ -99,34 +99,36 @@ function delicious_backup_block_view($delta = '') {
   global $user;
 
 //  if ($delta == 'delicious_info') {
-    $block = array();
+  $block = array();
 
-    $nid = arg(1);
-    if (!is_numeric($nid)) return;
-    
-    $obj = db_query("SELECT * FROM {delicious_bookmarks_backup} WHERE nid = :nid", array(':nid' => $nid))->fetchAssoc();
+  $nid = arg(1);
+  if (!is_numeric($nid))
+    return;
 
-    $list = array(
-       'link' => l($obj['href'], $obj['href']),
-       'extended' => $obj['extended'],
-       'last_update' => format_date($obj['content_fetched']),
-       'delicious_added' => format_date($obj['time']),
-       'delicious_sync' => format_date($obj['last_found']),
-       'status' => $obj['response_code'] == 200 ? 'OK' : 'offline',
-    );
+  $obj = db_query("SELECT * FROM {delicious_bookmarks_backup} WHERE nid = :nid", array(':nid' => $nid))->fetchAssoc();
 
-    if ($user->uid ==1) {
-      $list['bid'] = $obj['bid'];
-      $list['hash'] = $obj['hash'];
-    }
+  
 
-    $str=array();
-    foreach($list as $key => $value) {
-      if ($value != '') $str[]= '<span class="key '.$key.'">' . ucwords($key) . '</span>: ' . '<span class="value">' . $value . '</span>';
-    }
 
-    $block['content'] = '<div class="iphone-header">'. theme('item_list', array('items' => $str)) .'</div>' ;
-    return $block;
+  $node = node_load($nid);
+  
+  
+
+  #$test = field_attach_view('node', $node, 'full');
+  #print_r($test);
+  #print_r($node);
+  #exit;
+
+  $block['content'] = render(field_view_field('node', $node, 'field_delicious_screenshot', 'default'));
+  
+  $test = field_view_field('node', $node, 'field_delicious_pdf', 'default');
+  $test[0]['#file']->description = 'Download Webseite as PDF';
+ 
+  $block['content'] .= render($test);
+
+  $block['content'] .= _delicious_backup_get_bookmark_info($nid);
+
+  return $block;
 //  }
 }
 

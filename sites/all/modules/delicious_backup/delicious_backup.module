@@ -1,4 +1,5 @@
 <?php
+define('DELICIOUS_BACKUP_ROOT_DIR', 'public://dm/');
 
 require_once drupal_get_path('module', 'delicious_backup') . '/Files/JSLikeHTMLElement.php';
 require_once drupal_get_path('module', 'delicious_backup') . '/Files/DeliciousBackup.class.php';
@@ -23,29 +24,6 @@ function _delicious_back_preload2(&$content) {
   
 }
 
-function _delicious_back_preload(&$content) {
-  
-  //check for external gist scripts
-  if (!preg_match_all('@<script src="(http://gist.github.com/(\d+).js)"></script>@i', $content, $match, PREG_SET_ORDER))
-    return;
-
-  // walk through all javascript code snippets
-  foreach ($match as $git_code) {
-
-    // request javascript file and filter out code
-    $req = drupal_http_request($git_code[1]);
-    if (isset($req->data) AND preg_match('@<a href="(.*gist\.github.*)"[ ]@i', stripslashes($req->data), $res)) {
-      $req1 = drupal_http_request($res[1]);
-      
-      // replace external javascript file with raw source code
-      if (isset($req1->data)) {
-        $content = str_replace($git_code[0], '<pre>' . htmlentities($req1->data) . '</pre>', $content);
-      }
-     
-    }
-  }
-}
-
 /**
  * Implements hook_delicious_backup_updated().
  */
@@ -55,6 +33,33 @@ function delicious_backup_delicious_backup_updated($bid) {
   $queue = DrupalQueue::get('delicious_backup_update_node') ;
   $queue->createQueue();
   $queue->createItem($bid);
+}
+
+/**
+ * Implements hook_delicious_backup_pre_filter().
+ */
+function delicious_backup_delicious_backup_pre_filter(DeliciousBackupReader $obj) {
+  //check for external gist scripts
+  if (!preg_match_all('@<script src="(http://gist.github.com/(\d+).js)"></script>@i', $obj->content, $match, PREG_SET_ORDER))
+    return;
+
+  // walk through all javascript code snippets
+  foreach ($match as $git_code) {
+
+    // request javascript file and filter out code
+    $obj->
+    $req = drupal_http_request($git_code[1]);
+    if (isset($req->data) AND preg_match('@<a href="(.*gist\.github.*)"[ ]@i', stripslashes($req->data), $res)) {
+      $req1 = drupal_http_request($res[1]);
+      
+      // replace external javascript file with raw source code
+      if (isset($req1->data)) {
+        $obj->content = str_replace($git_code[0], '<pre>' . htmlentities($req1->data) . '</pre>', $obj->content);
+      }
+     
+    }
+  }  
+
 }
 
 function _delicious_backup_full_worker() {
@@ -79,7 +84,7 @@ function delicious_backup_update_node($obj, $getimages = false) {
 
     if (is_numeric($obj)) $obj = db_query("SELECT nid,bid,hash,href FROM {delicious_bookmarks_backup} WHERE bid = :bid", array(':bid' => $obj))->fetchObject();
     
-    $test = new Reader($obj->nid);
+    $test = new DeliciousBackupReader($obj->nid);
     $test->UpdateNode();
     
   
@@ -206,10 +211,15 @@ function _delicious_backup_taxonomie_helper($term_name, $vid) {
 
 function delicious_backup_get_content($link) {
 
-  if (is_numeric($link)) $link = db_query("SELECT bid, hash, href FROM {delicious_bookmarks_backup} WHERE bid = :bid", array(':bid' => $link))->fetchObject();
-  
-  $test = new Reader($link->nid);
-  $test->UpdateNode();
+  if (is_numeric($link)) $link = db_query("SELECT bid, hash, href, nid FROM {delicious_bookmarks_backup} WHERE bid = :bid", array(':bid' => $link))->fetchObject();
+  try {
+    $test = new DeliciousBackupReader($link->nid);
+    #$test->GetExternalHTML();
+    
+    $test->UpdateNode();    
+  } catch (Exception $e) {
+    watchdog('delicious_backup', 'error on bid: ' . $obj->bid . ' ' . $e->getMessage());
+  }
 
 }
 
@@ -220,6 +230,54 @@ function delicious_backup_get_valid_bookmarks() {
     #->condition('bid', 1340)
     ->orderBy('bid')
     ->execute();
+}
+
+function _delicious_backup_get_bookmark_info($nid, $views_mode = 'teaser') {
+  
+  if (is_numeric($nid)) {
+    $obj = db_query("SELECT * FROM {delicious_bookmarks_backup} WHERE nid = :nid", array(':nid' => $nid))->fetchAssoc();
+  }
+  
+  $node = node_load($obj['nid']);
+  
+  $parsed = parse_url($obj['href']);
+  $parsed['host'] = _filter_url_trim(str_replace('www.', '', $parsed['host']), 23);
+
+  $infos = '';
+  $test = array();
+  $test['link'] = l($parsed['host'], $obj['href']);
+  #$test['last_found'] = format_date($obj->last_found);
+  $test['added'] = format_date($obj['time']);
+  #$test['content_fetched'] = format_date('content_fetched');
+  #['dm-tags'] = render($content['delicious_backup_tags']);
+  
+  if ($shared = db_query("SELECT weight FROM {flag_content} WHERE content_id = :nid", array(':nid' => $nid))->fetchField()) {
+    $test['shared'] = 'Shared: ' . l($shared, 'http://www.delicious.com/url/' . $obj['hash']);
+  }
+  
+  $test['dm-tags'] = render(field_view_field('node', $node, 'delicious_backup_tags', 'teaser'));  
+  
+  
+  global $user;
+  if($user->uid == 1 AND $views_mode != 'teaser') {
+    $test['online'] = 'HTTP-Check: ' . ($obj['response_code'] == 200 ? 'OK' : 'offline');
+    $test['hash'] = $obj['hash'];
+    $test['bid'] = 'bid: ' . $obj['bid'];
+    
+    $test += array(
+      'last_update' => 'Update: ' . format_date($obj['content_fetched']),
+      'delicious_sync' => 'Sync: ' . format_date($obj['last_found']),    
+    );  
+  
+  }
+  
+  $infos = array('attributes' => array('class' => 'dm-info'));
+  foreach ($test as $key => $value) {
+    $infos['items'][] = array('data' => $value, 'class' => array('icon', $key));
+  }  
+
+  return theme('item_list', $infos);  
+
 }
 
 ?>
