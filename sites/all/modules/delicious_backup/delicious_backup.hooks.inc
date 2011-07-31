@@ -190,4 +190,54 @@ function delicious_backup_node_delete($node) {
   }
 }
 
+function delicious_backup_token_info($type = 'all') {
+  
+  
+    $data['tokens']['node']['hash'] = array(
+      'name' => t('Hash'),
+      'description' => t('Bookmark hash'),
+    );
+     
+    $data['tokens']['node']['hash_short'] = array(
+      'name' => t('Short Url for Bookmarks'),
+      'description' => t('Bookmark short url'),
+      'needs-data' => 'bookmark',
+    );    
+    
+    return $data;
+}
+
+function delicious_backup_tokens($type, $tokens, array $data = array(), array $options = array()) {
+
+  $replacements = array();
+
+  if ($type == 'node' && !empty($data['node'])) {
+
+    $node = $data['node'];
+    if ($node->type != 'delicious_bookmark')
+      return $replacements;
+
+    foreach ($tokens as $name => $original) {
+
+      switch ($name) {
+        case 'hash':
+          $hash = db_query("SELECT hash FROM {delicious_bookmarks_backup} WHERE nid = :nid", array(':nid' => $node->nid))->fetchField();
+          $replacements[$original] = $hash;
+          break;
+        case 'hash_short':
+          require_once drupal_get_path('module', 'delicious_backup') . '/Files/BNID.class.php';
+          $href = db_query("SELECT href FROM {delicious_bookmarks_backup} WHERE nid = :nid", array(':nid' => $node->nid))->fetchField();
+
+          $hash = sprintf('%u', crc32($href));
+          $conv = new BNID(); // default base 62 implementation
+
+          $replacements[$original] = $conv->base10ToN($hash);
+          break;
+      }
+    }
+  }
+
+  return $replacements;
+}
+
 ?>
