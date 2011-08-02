@@ -45,6 +45,9 @@ function delicious_backup_install() {
     $instance['bundle'] = 'delicious_bookmark';
     field_create_instance($instance);
   }
+  
+
+  #drupal_install_schema('delicious_backup');
 
 }
 
@@ -76,16 +79,16 @@ function delicious_backup_uninstall() {
   // Gather all the example content that might have been created while this
   // module was enabled.  Simple selects still use db_query().
   // http://api.drupal.org/api/function/db_query/7
-  $sql = 'SELECT nid FROM {node} n WHERE n.type = :type';
-  $result = db_query($sql, array(':type' => 'delicious_bookmark'));
-  $nids = array();
-  foreach ($result as $row) {
-    $nids[] = $row->nid;
-  }
+  #$sql = 'SELECT nid FROM {node} n WHERE n.type = :type';
+  #$result = db_query($sql, array(':type' => 'delicious_bookmark'));
+  #$nids = array();
+  #foreach ($result as $row) {
+  #  $nids[] = $row->nid;
+  #}
 
   // Delete all the nodes at once
   // http://api.drupal.org/api/function/node_delete_multiple/7
-  node_delete_multiple($nids);
+  #node_delete_multiple($nids);
 
 
   // Loop over each of the fields defined by this module and delete
@@ -113,8 +116,9 @@ function delicious_backup_uninstall() {
   variable_del('delicious_backup_last_cron');
   variable_del('delicious_backup_cron_time');
 
-  $vocabulary = taxonomy_vocabulary_machine_name_load('delicious_backup_tags');
-  taxonomy_vocabulary_delete($vocabulary->vid);
+  if($vocabulary = taxonomy_vocabulary_machine_name_load('delicious_backup_tags')) {
+    taxonomy_vocabulary_delete($vocabulary->vid);
+  }
 
   drupal_set_message('The delicious_backup module was uninstalled successfully.');
 }

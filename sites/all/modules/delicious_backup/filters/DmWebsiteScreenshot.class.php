@@ -27,26 +27,23 @@ class DmWebsiteScreenshot extends DmBase {
 
     file_prepare_directory($dest_path = dirname('public://' . $filename) , FILE_CREATE_DIRECTORY | FILE_MODIFY_PERMISSIONS);
     
-    try {
-      require_once drupal_get_path('module', 'delicious_backup') . '/Files/WebsiteToImage.class.php';
-      $websiteToImage = new WebsiteToImage();
-      $websiteToImage->setOutputFile(drupal_realpath('public://') . '/' . $filename)->setUrl($this->obj->href)->start();
-      $this->log(__CLASS__ . ':' . __FUNCTION__ . ' got image' );
-    } catch (Exception $e) {
-      $this->Exception($e->getMessage(), self::ERROR_LOG | self::ERROR_WATCHDOG);
-    }
-    
-    // generated file is no image so delete it or attach it to the node
-    if (!DeliciousBackup::FileIsImage('public://' . $filename)) {
-      $this->log(__CLASS__ . ':' . __FUNCTION__ . ' not a image:' . 'public://' . $filename );
-      if (file_exists('public://' . $filename)) drupal_unlink('public://' . $filename);
-      return;
-    }
-    
-    $test = DeliciousBackup::UriToFile('public://' . $filename);
+    if (!file_exists('public://' . $filename)) {
+      try {
+        require_once drupal_get_path('module', 'delicious_backup') . '/Files/WebsiteToImage.class.php';
+        $websiteToImage = new WebsiteToImage();
+        $websiteToImage->setOutputFile(drupal_realpath('public://') . '/' . $filename)->setUrl($this->obj->href)->start();
+        $this->log(__CLASS__ . ':' . __FUNCTION__ . ' got image' );
+      } catch (Exception $e) {
+        $this->Exception($e->getMessage(), self::ERROR_LOG | self::ERROR_WATCHDOG);
+      }
 
-    #print_r($test);
-    #exit;
+      // generated file is no image so delete it or attach it to the node
+      if (!DeliciousBackup::FileIsImage('public://' . $filename)) {
+        $this->log(__CLASS__ . ':' . __FUNCTION__ . ' not a image:' . 'public://' . $filename );
+        if (file_exists('public://' . $filename)) drupal_unlink('public://' . $filename);
+        return;
+      }
+    }
     
     DeliciousBackup::AttachFileToNode($this->obj->node, self::FIELD, DeliciousBackup::UriToFile('public://' . $filename), true);
   }    

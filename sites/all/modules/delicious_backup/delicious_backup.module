@@ -26,49 +26,6 @@ function delicious_backup_delicious_backup_updated($bid) {
   $queue->createItem($bid);
 }
 
-/**
- * Implements hook_delicious_backup_pre_filter().
- */
-function delicious_backup_delicious_backup_pre_filter(DeliciousBackupReader $obj) {
-  //check for external gist scripts
-  if (!preg_match_all('@<script src="(http://gist.github.com/(\d+).js)"></script>@i', $obj->content, $match, PREG_SET_ORDER))
-    return;
-
-  // walk through all javascript code snippets
-  foreach ($match as $git_code) {
-
-    // request javascript file and filter out code
-    $obj->
-    $req = drupal_http_request($git_code[1]);
-    if (isset($req->data) AND preg_match('@<a href="(.*gist\.github.*)"[ ]@i', stripslashes($req->data), $res)) {
-      $req1 = drupal_http_request($res[1]);
-      
-      // replace external javascript file with raw source code
-      if (isset($req1->data)) {
-        $obj->content = str_replace($git_code[0], '<pre>' . htmlentities($req1->data) . '</pre>', $obj->content);
-      }
-     
-    }
-  }  
-
-}
-
-function _delicious_backup_full_worker() {
-  /* queue workers */
-  $queue = DrupalQueue::get('delicious_backup_get_content');
-  while ($item = $queue->claimItem(15)) {
-    delicious_backup_get_content($item->data);
-    $queue->deleteItem($item);
-  }  
-  
-  /* queue workers */
-  $queue = DrupalQueue::get('delicious_backup_update_node');
-  while ($item = $queue->claimItem(15)) {
-    delicious_backup_update_node($item->data);
-    $queue->deleteItem($item);
-  }     
-}
-
 function delicious_backup_update_node($obj, $getimages = false) {
   
   try {
@@ -205,9 +162,10 @@ function delicious_backup_get_content($link) {
   if (is_numeric($link)) $link = db_query("SELECT bid, hash, href, nid FROM {delicious_bookmarks_backup} WHERE bid = :bid", array(':bid' => $link))->fetchObject();
   try {
     $test = new DeliciousBackupReader($link->nid);
-    #$test->GetExternalHTML();
-    
+    $test->GetExternalHTML();
     $test->UpdateNode();    
+    
+    return $test->GetLog();
   } catch (Exception $e) {
     watchdog('delicious_backup', 'error on bid: ' . $obj->bid . ' ' . $e->getMessage());
   }

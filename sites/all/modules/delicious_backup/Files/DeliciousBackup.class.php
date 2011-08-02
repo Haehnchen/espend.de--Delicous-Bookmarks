@@ -149,19 +149,16 @@ class DeliciousBackup {
   
   static function Invoke(&$var, $hook) {
     //module_invoke_all('delicious_backup_pre_filter', $this);    
+
+    require_once drupal_get_path('module', 'delicious_backup') . '/Files/Reader.class.php';
     $path = drupal_get_path('module', 'delicious_backup') . '/filters';
-    require_once $path . '/DmBase.class.php' ;
 
     foreach(file_scan_directory($path, '/.*\.class.php$/') as $inc) {
       $class = str_replace('.class.php', '', $inc->filename);
-      if ($class == 'DmBase') continue;
               
       require_once $inc->uri;
 
       $value = call_user_func("$class::$hook");
-      
-      #print_r($value );
-      
       $var = array_merge_recursive($var, $value);
       
     }

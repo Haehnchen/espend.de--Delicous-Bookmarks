@@ -55,11 +55,9 @@ class DeliciousBackupReader {
   private function CallinternalHook($hook) {
     //module_invoke_all('delicious_backup_pre_filter', $this);    
     $path = drupal_get_path('module', 'delicious_backup') . '/filters';
-    require_once $path . '/DmBase.class.php' ;
 
     foreach(file_scan_directory($path, '/.*\.class.php$/') as $inc) {
       $class = str_replace('.class.php', '', $inc->filename);
-      if ($class == 'DmBase') continue;
               
       require_once $inc->uri;
 
@@ -81,7 +79,7 @@ class DeliciousBackupReader {
 
       // validate file
       if (!file_exists($file))
-        $this->Exception('no file content');
+        $this->Exception('no file content', self::ERROR_WATCHDOG | self::ERROR_LOG_AND_THROW);
 
       if ($this->FileIsBinary($file))
         $this->Exception('file is binary'); //@TODO: PDF download or other?
@@ -101,11 +99,9 @@ class DeliciousBackupReader {
       $this->log('got content html');      
 
       $this->obj->content = DeliciousBackup::Readability($this->obj->html);
-      $this->log('filter with Readability');      
+      $this->log('filter with Readability');    
       
-      $this->log('invoke: delicious_backup_pre_filter');
       $this->CallinternalHook('PreFilter');
-
       $this->FilterContent();
       $this->CallinternalHook('PostFilter');
       
@@ -287,7 +283,7 @@ class DeliciousBackupReader {
 
       $this->HTTPDownload($this->obj->href, $filename);
 
-      module_invoke_all('delicious_backup_updated', $this->obj->bid);
+      #module_invoke_all('delicious_backup_updated', $this->obj->bid);
 
       db_update('delicious_bookmarks_backup')->fields(array('response_code' => 200, 'content_fetched' => time(), 'content_updated' => time(), 'queued' => 0))->condition('bid', $this->obj->bid)->execute();
       watchdog('delicious_backup', 'OK getting html content %id - %url ', array('%id' => $this->obj->bid, '%url' => $this->obj->href));
@@ -343,5 +339,21 @@ class DeliciousBackupReader {
     
   }
 
+  
+class DmBase extends DeliciousBackupReader {
+
+  public function __construct(DeliciousBackupReaderObj $test) {
+    $this->obj = $test;
+  }
+  
+  public function preFilter() { }
+  public function postFilter() { }
+  
+  public function install() { }
+  public function uninstall() { }
+  public function schema() { }
+  
+  static public function fields() { return array(); }
+}  
 
 ?>

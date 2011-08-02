@@ -30,25 +30,24 @@ class DmPdf extends DmBase {
 
     file_prepare_directory($dest_path = dirname('public://' . $filename) , FILE_CREATE_DIRECTORY | FILE_MODIFY_PERMISSIONS);
 
-        
-    try {
-      require_once drupal_get_path('module', 'delicious_backup') . '/Files/WebsiteToImage.class.php';
-      $websiteToImage = new WebsiteToImage();
-      $websiteToImage->setOutputFile(drupal_realpath('public://') . '/' . $filename)->setUrl($this->obj->href)->start();
-      $this->log(__CLASS__ . ':' . __FUNCTION__ . ' got pdf' );
-    } catch (Exception $e) {
-      $this->Exception($e->getMessage(), self::ERROR_LOG | self::ERROR_WATCHDOG);
-    }
-    
-    // generated file is no image so delete it or attach it to the node
-    if (file_exists('public://' . $filename) AND @filesize('public://' . $filename) == 0) {
-      $this->log(__CLASS__ . ':' . __FUNCTION__ . ' not a valid file:' . 'public://' . $filename );
-      drupal_unlink('public://' . $filename);
-      return;
-    }
+    if (!file_exists('public://' . $filename)) {      
+      try {
+        require_once drupal_get_path('module', 'delicious_backup') . '/Files/WebsiteToImage.class.php';
+        $websiteToImage = new WebsiteToImage();
+        $websiteToImage->setOutputFile(drupal_realpath('public://') . '/' . $filename)->setUrl($this->obj->href)->start();
+        $this->log(__CLASS__ . ':' . __FUNCTION__ . ' got pdf' );
+      } catch (Exception $e) {
+        $this->Exception($e->getMessage(), self::ERROR_LOG | self::ERROR_WATCHDOG);
+      }
 
-    $test = DeliciousBackup::UriToFile('public://' . $filename);
-    
+      // generated file is no image so delete it or attach it to the node
+      if (file_exists('public://' . $filename) AND @filesize('public://' . $filename) == 0) {
+        $this->log(__CLASS__ . ':' . __FUNCTION__ . ' not a valid file:' . 'public://' . $filename );
+        drupal_unlink('public://' . $filename);
+        return;
+      }
+    }
+   
     DeliciousBackup::AttachFileToNode($this->obj->node, self::FIELD, DeliciousBackup::UriToFile('public://' . $filename), true);
   }    
   

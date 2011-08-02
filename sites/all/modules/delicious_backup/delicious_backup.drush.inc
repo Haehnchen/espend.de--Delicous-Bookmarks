@@ -94,8 +94,46 @@ function delicious_backup_drush_command() {
     'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_FULL, // No bootstrap at all.
   );     
   
+  $items['run-my-queue'] = array(
+    'description' => "Makes a delicious sandwich.", 
+    'arguments' => array(
+      'filling' => 'The type of the sandwich (turkey, cheese, etc.)',
+    ), 
+    'options' => array(
+      'spreads' => 'Comma delimited list of spreads (e.g. mayonnaise, mustard)',
+    ), 
+    'examples' => array(
+      'drush make-me-a-sandwich turkey --spreads=ketchup,mustard',
+    ), 
+    #'aliases' => array('mmas'), 
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_FULL, // No bootstrap at all.
+  );   
 
   return $items;
+}
+
+function drush_delicious_backup_run_my_queue() {
+  
+  drush_print('Queue running');
+  
+  /* queue workers */
+  $queue = DrupalQueue::get('delicious_backup_get_content');
+  while ($item = $queue->claimItem(15)) {
+    drush_print('Queue:' . $item->data);
+    drush_print(delicious_backup_get_content($item->data));
+    $queue->deleteItem($item);
+  }  
+  
+  /* queue workers */
+  $queue = DrupalQueue::get('delicious_backup_update_node');
+  while ($item = $queue->claimItem(15)) {
+    delicious_backup_update_node($item->data);
+    drush_print('Queue:' . $item->data);    
+    $queue->deleteItem($item);
+  }
+  
+  drush_print('Queue finish');  
+  
 }
 
 function drush_delicious_backup_run_all() {
