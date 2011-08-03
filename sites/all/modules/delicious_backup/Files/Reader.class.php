@@ -12,6 +12,8 @@ class DeliciousBackupReader {
   
   var $getimages = true;
   var $obj = null;
+  
+  private $InvokeFilter = array();
 
   function __construct($node, $cache = false) {
     $this->obj = new DeliciousBackupReaderObj();
@@ -45,6 +47,10 @@ class DeliciousBackupReader {
 
   }
 
+  public function SetInvokeFilter($filter) {
+    $this->InvokeFilter = array_merge($this->InvokeFilter, (array) $filter);
+  }
+  
   private function GetNode() {
     if ($this->obj->node == null)
       $this->obj->node = node_load($this->nid);
@@ -58,7 +64,10 @@ class DeliciousBackupReader {
 
     foreach(file_scan_directory($path, '/.*\.class.php$/') as $inc) {
       $class = str_replace('.class.php', '', $inc->filename);
-              
+
+      if (count($this->InvokeFilter) > 0 AND !in_array($class,$this->InvokeFilter))
+        continue;
+      
       require_once $inc->uri;
 
       $filter = new $class($this->obj);

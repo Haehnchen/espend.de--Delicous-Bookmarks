@@ -4,7 +4,7 @@ class DmWebsiteScreenshot extends DmBase {
   
   const DIR_SCREENSHOT = '';
   const SCREENSHOT_FORMAT = 'png';
-  const FIELD = 'field_delicious_screenshot';
+  const FIELD = 'bookmark_screenshot';
   
   public function postFilter() {
     $this->log(__CLASS__ . ':' . __FUNCTION__);

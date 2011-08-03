@@ -148,22 +148,35 @@ class DeliciousBackup {
   }
   
   static function Invoke(&$var, $hook) {
-    //module_invoke_all('delicious_backup_pre_filter', $this);    
+    foreach(self::InvokeList() as $inc) {
+      require_once $inc['filename'];
+
+      $value = call_user_func($inc['class'] . "::$hook");
+      $var = array_merge_recursive($var, $value);
+      
+    }
+  }
+  
+  static function InvokeList() {
 
     require_once drupal_get_path('module', 'delicious_backup') . '/Files/Reader.class.php';
     $path = drupal_get_path('module', 'delicious_backup') . '/filters';
 
+    $b = array();
     foreach(file_scan_directory($path, '/.*\.class.php$/') as $inc) {
       $class = str_replace('.class.php', '', $inc->filename);
               
-      require_once $inc->uri;
-
-      $value = call_user_func("$class::$hook");
-      $var = array_merge_recursive($var, $value);
-      
+      $b[$class] = array(
+        'class' => $class,
+        'filename' => $inc->filename,
+      );
     }
-  }    
     
+    return $b;
+    
+  }
+
+
   static function AttachFileToNode(&$node, $field, $file, $reloadNode = true) {
 
 

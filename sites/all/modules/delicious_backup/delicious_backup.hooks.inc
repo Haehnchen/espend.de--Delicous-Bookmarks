@@ -109,9 +109,9 @@ function delicious_backup_block_view($delta = '') {
 
   $node = node_load($nid);
 
-  $block['content'] = render(field_view_field('node', $node, 'field_delicious_screenshot', 'default'));
+  $block['content'] = render(field_view_field('node', $node, 'bookmark_screenshot', 'default'));
   
-  $test = field_view_field('node', $node, 'field_delicious_pdf', 'default');
+  $test = field_view_field('node', $node, 'bookmark_pdf', 'default');
   $test[0]['#file']->description = 'Download website as PDF';
  
   $block['content'] .= render($test);

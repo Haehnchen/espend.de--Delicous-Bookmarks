@@ -45,7 +45,7 @@ function delicious_backup_update_node($obj, $getimages = false) {
 
 function delicious_backup_import_bookmarks() {
 
-  $vid = taxonomy_vocabulary_machine_name_load('delicious_backup_tags')->vid;
+  $vid = taxonomy_vocabulary_machine_name_load('bookmark_tags')->vid;
 
   // load bookmarks from delicious
   if (!$bookmarks = DeliciousBackup::GetResponse('posts/all?')) {
@@ -89,7 +89,7 @@ function delicious_backup_import_bookmarks() {
 
         node_object_prepare($node);
         $node->title = (string) $post['description'];
-        $node->delicious_backup_tags[LANGUAGE_NONE] = $categories;
+        $node->bookmark_tags[LANGUAGE_NONE] = $categories;
         $node->created = strtotime((string) $post['time']);
 
         node_save($node);
@@ -104,9 +104,9 @@ function delicious_backup_import_bookmarks() {
         $new++;
 
       } else {
-
+        
         if ($node = node_load($obj['nid'])) {
-          $node->delicious_backup_tags[LANGUAGE_NONE] = $categories;
+          $node->bookmark_tags[LANGUAGE_NONE] = $categories;
           $node->created = strtotime((string) $post['time']);
           
           node_save($node);
@@ -204,7 +204,7 @@ function _delicious_backup_get_bookmark_info($nid, $views_mode = 'teaser') {
     $test['shared'] = 'Shared: ' . l($shared, 'http://www.delicious.com/url/' . $obj['hash']);
   }
   
-  $test['dm-tags'] = render(field_view_field('node', $node, 'delicious_backup_tags', 'teaser'));  
+  $test['dm-tags'] = render(field_view_field('node', $node, 'bookmark_tags', 'teaser'));  
   
   
   global $user;

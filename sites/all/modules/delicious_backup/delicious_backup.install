@@ -54,14 +54,46 @@ function delicious_backup_install() {
 function _delicious_backup_installed_fields() {
 
   $fields = array();
+  $fields['fields'] = array(
+    // taxonomy term reference field, referencing a vocabulary called 'authors'
+    'bookmark_tags' => array(
+      'field_name' => 'bookmark_tags',
+      'type' => 'taxonomy_term_reference',
+      'cardinality' => FIELD_CARDINALITY_UNLIMITED,
+      'settings' => array(
+        'allowed_values' => array(
+          array(
+            'vocabulary' => 'bookmarks_tags',
+            'parent' => 0,
+          ),
+        ),
+      ),
+    )
+   );
+
+  
   DeliciousBackup::Invoke($fields, 'fields');
 
   return isset($fields['fields']) ? $fields['fields'] : array();
 }
 
 function _delicious_backup_installed_instances() {
-
+  $t = get_t();
+  
   $fields = array();
+  $fields['instances'] = array(
+    'delicious_backup_tags' => array(
+      'field_name' => 'bookmark_tags',
+      'entity_type' => 'node',
+      'label' => $t('Delicious Bookmark Tags'),
+      'bundle' => 'bookmarks_tags',
+      'required' => FALSE,
+      'widget' => array(
+        'type' => 'taxonomy_autocomplete',
+      ),
+    ),
+  );
+
   DeliciousBackup::Invoke($fields, 'fields');
 
   return isset($fields['instances']) ? $fields['instances'] : array();
@@ -116,7 +148,7 @@ function delicious_backup_uninstall() {
   variable_del('delicious_backup_last_cron');
   variable_del('delicious_backup_cron_time');
 
-  if($vocabulary = taxonomy_vocabulary_machine_name_load('delicious_backup_tags')) {
+  if($vocabulary = taxonomy_vocabulary_machine_name_load('bookmark_tags')) {
     taxonomy_vocabulary_delete($vocabulary->vid);
   }
 
@@ -244,10 +276,10 @@ function delicious_backup_enable() {
   field_associate_fields('taxonomy');
   // Create the forum vocabulary if it does not exist.
 
-  if (!$vocabulary = taxonomy_vocabulary_machine_name_load('delicious_backup_tags')) {
+  if (!$vocabulary = taxonomy_vocabulary_machine_name_load('bookmark_tags')) {
     $edit = array(
       'name' => t('Delicious Backup Tags'),
-      'machine_name' => 'delicious_backup_tags',
+      'machine_name' => 'bookmark_tags',
       'description' => t('Delicious Backup vocabulary'),
       'hierarchy' => 1,
       'module' => 'delicious_backup',

@@ -4,7 +4,7 @@ class DmPdf extends DmBase {
   
   const DIR_CLASS = '';
   const SCREENSHOT_FORMAT = 'pdf';
-  const FIELD = 'field_delicious_pdf';
+  const FIELD = 'bookmark_pdf';
   
   public function postFilter() {
     $this->log(__CLASS__ . ':' . __FUNCTION__);

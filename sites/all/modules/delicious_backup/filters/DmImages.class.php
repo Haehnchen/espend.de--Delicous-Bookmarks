@@ -2,7 +2,7 @@
 
 class DmImages extends DmBase {
   
-  const FIELD = 'delicious_bookmark_image';
+  const FIELD = 'bookmark_images';
   const DIR_IMAGES = 'images';
   
   
@@ -180,7 +180,7 @@ class DmImages extends DmBase {
     $instance = array(
       self::FIELD => array(
         'field_name' => self::FIELD,
-        'label' => $t('Image'),
+        'label' => $t('Images'),
         'settings' => array(
           'file_extensions' => 'png gif jpg jpeg',
         ),

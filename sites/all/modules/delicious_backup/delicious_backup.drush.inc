@@ -109,7 +109,51 @@ function delicious_backup_drush_command() {
     'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_FULL, // No bootstrap at all.
   );   
 
+  $items['bookmarks'] = array(
+    'description' => "All Bookmarks Stuff", 
+    'options' => array(
+      'hooks' => 'Comma delimited list of hooks: ' . implode(', ', array_keys(DeliciousBackup::InvokeList())),
+    ),
+    'arguments' => array(
+      'workon' => 'Which Bookmarks should we work on: all or queue',
+    ),    
+    'examples' => array(
+      'drush bookmarks all --hooks=filtered,hooks',
+    ), 
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_FULL, // No bootstrap at all.
+  );     
+  
+  
   return $items;
+}
+
+function drush_delicious_backup_bookmarks($workon = 'all') {
+  
+  if (!drush_get_option('uri')) {
+    return drush_set_error('NO_URI', dt('We need an uri to run this command. Please use --uri=http:://UrlToPage'));
+  }  
+  
+  if ($hooks = drush_get_option('hooks')) {
+    $hooks = explode(',', $hooks);
+  }
+  
+  if ($workon == 'all') {
+      drush_print('Running on all Bookmarks');
+    
+    foreach (delicious_backup_get_valid_bookmarks() as $row) {
+      drush_print('running:' . $row->nid . '/' . $row->bid);
+      $test = new DeliciousBackupReader($row->nid);
+      if ($hooks) $test->SetInvokeFilter($hooks);
+      $test->UpdateNode();
+      drush_print($test->GetLog());    
+      unset($test);
+    }
+  }
+  
+  if ($workon == 'queue') {
+    drush_delicious_backup_run_my_queue();
+  }
+
 }
 
 function drush_delicious_backup_run_my_queue() {
@@ -168,64 +212,7 @@ function drush_delicious_backup_get_external_html() {
   }
 }
 
-function drush_delicious_backup_get_delicious_weight() {
 
-  foreach (delicious_backup_get_valid_bookmarks() as $row) {
-    $sum = DeliciousBackup::GetDeliciousWeight($row->hash);
-    if (isset($sum['total_posts'])) {
-     
-      // fake admin user!?
-      $user = user_load(1);
-      flag_weights_set_flag_with_flag('delicious_weight', $row->nid, $user, $sum['total_posts']);
-    
-    }
-  }
-}
 
-function drush_delicious_backup_get_all_content() {
-  foreach (delicious_backup_get_valid_bookmarks() as $row) {
-    drush_print('running:' . $row->nid . '/' . $row->bid);
-    $test = new DeliciousBackupReader($row->nid);
-    $test->UpdateNode();
-  }
-}
-
-function drush_delicious_backup_make_screenshot($filling = 'ascii') {
- 
-  require_once drupal_get_path('module', 'delicious_backup') . '/Files/WebsiteToImage.class.php';
-  foreach (delicious_backup_get_valid_bookmarks() as $row) {
-    $node = node_load($row->nid);
-   
-    // @TODO convert internal path to absolute some better solution
-    $filename = str_replace('public://', '', DELICIOUS_BACKUP_ROOT_DIR . $row->hash . '/screenshot.png');
-    
-    // check if image already attached to this node
-    if (DeliciousBackup::ImageIsAttached('field_delicious_screenshot', $node, basename($filename))) {
-      continue;
-    }
-    
-    drush_print('running:' . $row->nid . '/' . $row->bid);    
-
-    file_prepare_directory($dest_path = dirname('public://' . $filename) , FILE_CREATE_DIRECTORY | FILE_MODIFY_PERMISSIONS);
-    
-    try {
-      $websiteToImage = new WebsiteToImage();
-      $websiteToImage->setProgramPath('/root/wkhtmltoimage-i386')->setOutputFile(drupal_realpath('public://') . '/' . $filename)->setUrl($row->href)->start();
-    } catch (Exception $e) {
-      watchdog_exception('delicious_backup', $e, null, array(), WATCHDOG_NOTICE);
-    }
-    
-    // generated file is no image so delete it or attach it to the node
-    if (!DeliciousBackup::FileIsImage('public://' . $filename)) {
-      if (file_exists('public://' . $filename)) drupal_unlink('public://' . $filename);
-    } else {
-      DeliciousBackup::AttachFileToNode($node, 'field_delicious_screenshot', DeliciousBackup::UriToFile('public://' . $filename));
-    }
-    
-    
-  }  
-  
-  
-}
 
 ?>

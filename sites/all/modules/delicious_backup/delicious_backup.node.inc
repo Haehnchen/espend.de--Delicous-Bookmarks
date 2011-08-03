@@ -15,6 +15,7 @@ function delicious_backup_bookmark_upd($node) {
     #echo $node->title;
   $test = new DeliciousBackupReader($node, true);
   $test->getimages = true;
+
   $test->UpdateNode();
   
 
