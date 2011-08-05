@@ -89,6 +89,11 @@ function delicious_backup_block_info() {
     #'pages' => 'node/*', // Not usually provided here.
   );
 
+  $blocks['delicious_top'] = array(
+    'info' => t('Delicious Node Info Top'),
+    'cache' => DRUPAL_CACHE_PER_PAGE,
+  );  
+  
   return $blocks;
 }
 
@@ -98,28 +103,50 @@ function delicious_backup_block_info() {
 function delicious_backup_block_view($delta = '') {
   global $user;
 
-//  if ($delta == 'delicious_info') {
-  $block = array();
+  if ($delta == 'delicious_info') {
+    $block = array();
 
-  $nid = arg(1);
-  if (!is_numeric($nid))
-    return;
+    $nid = arg(1);
+    if (!is_numeric($nid))
+      return;
 
-  $obj = db_query("SELECT * FROM {delicious_bookmarks_backup} WHERE nid = :nid", array(':nid' => $nid))->fetchAssoc();
+    $obj = db_query("SELECT * FROM {delicious_bookmarks_backup} WHERE nid = :nid", array(':nid' => $nid))->fetchAssoc();
 
-  $node = node_load($nid);
+    $node = node_load($nid);
 
-  $block['content'] = render(field_view_field('node', $node, 'bookmark_screenshot', 'default'));
+    $block['content'] = render(field_view_field('node', $node, 'bookmark_screenshot', 'default'));
+
+    $test = field_view_field('node', $node, 'bookmark_pdf', 'default');
+    $test[0]['#file']->description = 'Download website as PDF';
+
+    $block['content'] .= render($test);
+
+    $block['content'] .= _delicious_backup_get_bookmark_info($nid, 'full');
+
+    return $block;
+  }
   
-  $test = field_view_field('node', $node, 'bookmark_pdf', 'default');
-  $test[0]['#file']->description = 'Download website as PDF';
- 
-  $block['content'] .= render($test);
+  if ($delta == 'delicious_top') {
+    
+    $nid = arg(1);
+    if (!is_numeric($nid))
+      return;    
 
-  $block['content'] .= _delicious_backup_get_bookmark_info($nid, 'full');
-
-  return $block;
-//  }
+    $obj = db_query("SELECT * FROM {delicious_bookmarks_backup} WHERE nid = :nid", array(':nid' => $nid))->fetchAssoc();
+    
+    $add = '';
+    if ($obj['extended'] != '') {
+      $add = '<div class="extended"><h2>Additional Bookmark Comments</h2><pre>'. check_markup(nl2br($obj['extended'])) . '</pre></div>';
+    }
+    
+    $block = array(
+      'content' => '<div class="messages bookmark">This is a Bookmark from ' . l(_filter_url_trim($obj['description'], 100), $obj['href']) . $add . ' </div>',
+    );
+    
+    return $block;
+  }  
+  
+  
 }
 
 function delicious_backup_cron() {
@@ -133,9 +160,10 @@ function delicious_backup_cron() {
   
   /* fetch all bookmarks */
   $cron_time = time() - variable_get('delicious_backup_last_cron', 0);
-  if ($cron_time > (variable_get('delicious_backup_cron_time', 60*60*12))) delicious_backup_import_bookmarks();
-  variable_set('delicious_backup_last_cron', time());
-
+  if ($cron_time > (variable_get('delicious_backup_cron_time', 60*60*12))) { 
+    delicious_backup_import_bookmarks();
+    variable_set('delicious_backup_last_cron', time());    
+  }
   
   /* fetch html content worker */
   //http://api.drupal.org/api/drupal/modules--aggregator--aggregator.module/function/aggregator_cron/7
