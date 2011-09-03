@@ -44,8 +44,8 @@ class DmWebsiteScreenshot extends DmBase {
         return;
       }
     }
-    
-    DeliciousBackup::AttachFileToNode($this->obj->node, self::FIELD, DeliciousBackup::UriToFile('public://' . $filename), true);
+
+    DeliciousBackup::AttachFileToNode($this->obj->node, self::FIELD, DeliciousBackup::UriToFile('public://' . $filename), true, true);
   }    
   
   static public function fields() {

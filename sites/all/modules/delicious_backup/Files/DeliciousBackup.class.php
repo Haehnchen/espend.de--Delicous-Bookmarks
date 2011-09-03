@@ -177,14 +177,18 @@ class DeliciousBackup {
   }
 
 
-  static function AttachFileToNode(&$node, $field, $file, $reloadNode = true) {
+  static function AttachFileToNode(&$node, $field, $file, $reloadNode = true, $single = false) {
 
 
+    if ($single == true) {
+      $node->{$field}[$node->language] = array();
+    }
+      
     $node->{$field}[$node->language][] = array(
       'fid' => $file->fid,
       'display' => 1, /* for normal files; doenst matter for images */
-    );
-    
+    );      
+
     node_save($node);
 
     if ($reloadNode == true) 
